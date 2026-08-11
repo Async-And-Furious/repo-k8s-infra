@@ -22,6 +22,18 @@ output "oidc_provider_arn" {
   value = module.eks.oidc_provider_arn
 }
 
+output "cluster_oidc_issuer_url" {
+  value = module.eks.cluster_oidc_issuer_url
+}
+
+output "cluster_security_group_id" {
+  value = module.eks.cluster_security_group_id
+}
+
+output "load_balancer_controller_role_arn" {
+  value = module.eks.load_balancer_controller_role_arn
+}
+
 output "node_security_group_id" {
   description = "Consumed by repo-db-infra's allowed_security_group_ids"
   value       = module.eks.node_security_group_id
@@ -31,7 +43,14 @@ output "ecr_repository_url" {
   value = module.ecr.repository_url
 }
 
-# ALB endpoint/ARN for RFC-003's API Gateway VPC Link integration: deferred.
-# The internal ALB is created by the AWS Load Balancer Controller via a
-# Kubernetes Ingress resource, not by this Terraform config directly, so
-# there's nothing to output here yet — see modules/eks/main.tf.
+output "internal_alb_contract" {
+  description = "RFC-003 contract for the controller-managed internal ALB"
+  value = {
+    scheme                 = "internal"
+    ingress_class          = "alb"
+    load_balancer_name_tag = "tc3-${var.environment}-internal"
+    controller_role_arn    = module.eks.load_balancer_controller_role_arn
+    dns_name               = null
+    arn                    = null
+  }
+}

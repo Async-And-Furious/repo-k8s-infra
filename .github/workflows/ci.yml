@@ -5,6 +5,13 @@ on:
   push:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      action:
+        description: HML operation
+        required: true
+        default: plan
+        type: choice
+        options: [plan, apply]
 
 permissions:
   id-token: write
@@ -12,7 +19,7 @@ permissions:
 
 env:
   AWS_REGION: us-east-1
-  TF_WORKING_DIR: environments/hml
+  TF_WORKING_DIR: .
 
 jobs:
   validate:
@@ -22,60 +29,44 @@ jobs:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
       - run: terraform fmt -check -recursive
-      - name: Terraform Init (no backend)
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init -backend=false
-      - name: Terraform Validate
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform validate
+      - run: terraform init -backend=false
+      - run: terraform validate
 
   plan:
     name: Terraform Plan
     needs: validate
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Terraform Init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init
-      - name: Terraform Plan
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform plan -out=tfplan
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
+      - run: terraform init -backend-config=environments/hml/backend.hcl
+      - run: terraform plan -var=environment=hml -out=tfplan
+      - uses: actions/upload-artifact@v4
         with:
           name: tfplan
-          path: ${{ env.TF_WORKING_DIR }}/tfplan
+          path: tfplan
           retention-days: 7
 
   apply:
     name: Terraform Apply
     needs: plan
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
     runs-on: ubuntu-latest
     environment: hml-apply
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Terraform Init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init
-      - name: Download Plan
-        uses: actions/download-artifact@v4
+      - run: terraform init -backend-config=environments/hml/backend.hcl
+      - uses: actions/download-artifact@v4
         with:
           name: tfplan
-          path: ${{ env.TF_WORKING_DIR }}
-      - name: Terraform Apply
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform apply -auto-approve tfplan
+      - run: terraform apply -auto-approve tfplan
