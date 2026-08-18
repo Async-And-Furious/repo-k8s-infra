@@ -5,12 +5,17 @@ module "eks" {
   cluster_name    = "tc3-eks-${var.environment}"
   cluster_version = var.cluster_version
 
-  cluster_endpoint_public_access = true
+  cluster_endpoint_public_access       = var.cluster_endpoint_public_access
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 
   vpc_id     = var.vpc_id
   subnet_ids = var.private_subnet_ids
 
   enable_irsa = true
+
+  create_iam_role = var.eks_cluster_role_arn == ""
+  iam_role_arn    = var.eks_cluster_role_arn != "" ? var.eks_cluster_role_arn : null
 
   cluster_addons = {
     coredns    = {}
@@ -20,10 +25,12 @@ module "eks" {
 
   eks_managed_node_groups = {
     default = {
-      instance_types = var.node_instance_types
-      desired_size   = var.node_desired_size
-      min_size       = var.node_min_size
-      max_size       = var.node_max_size
+      instance_types  = var.node_instance_types
+      desired_size    = var.node_desired_size
+      min_size        = var.node_min_size
+      max_size        = var.node_max_size
+      create_iam_role = var.eks_node_role_arn == ""
+      iam_role_arn    = var.eks_node_role_arn != "" ? var.eks_node_role_arn : null
     }
   }
 }
@@ -53,6 +60,7 @@ data "aws_iam_policy_document" "load_balancer_controller_assume_role" {
 }
 
 resource "aws_iam_role" "load_balancer_controller" {
+  count              = var.load_balancer_controller_role_arn == "" ? 1 : 0
   name               = "tc3-eks-${var.environment}-aws-load-balancer-controller"
   assume_role_policy = data.aws_iam_policy_document.load_balancer_controller_assume_role.json
 }
@@ -91,7 +99,8 @@ data "aws_iam_policy_document" "load_balancer_controller" {
 }
 
 resource "aws_iam_role_policy" "load_balancer_controller" {
+  count  = var.load_balancer_controller_role_arn == "" ? 1 : 0
   name   = "aws-load-balancer-controller"
-  role   = aws_iam_role.load_balancer_controller.id
+  role   = aws_iam_role.load_balancer_controller[0].id
   policy = data.aws_iam_policy_document.load_balancer_controller.json
 }
