@@ -25,7 +25,7 @@ output "cluster_security_group_id" {
 
 output "load_balancer_controller_role_arn" {
   description = "IRSA role ARN for kube-system/aws-load-balancer-controller"
-  value       = aws_iam_role.load_balancer_controller.arn
+  value       = var.load_balancer_controller_role_arn != "" ? var.load_balancer_controller_role_arn : aws_iam_role.load_balancer_controller[0].arn
 }
 
 output "node_security_group_id" {

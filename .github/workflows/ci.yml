@@ -6,20 +6,34 @@ on:
     branches: [main, develop]
   workflow_dispatch:
     inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: hml
+        type: choice
+        options: [hml, prod]
       action:
-        description: HML operation
+        description: Terraform operation
         required: true
         default: plan
         type: choice
         options: [plan, apply]
 
 permissions:
-  id-token: write
   contents: read
+
+concurrency:
+  group: terraform-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref }}
+  cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-1
   TF_WORKING_DIR: .
+  TF_VAR_eks_cluster_role_arn: ${{ vars.EKS_CLUSTER_ROLE_ARN }}
+  TF_VAR_eks_node_role_arn: ${{ vars.EKS_NODE_ROLE_ARN }}
+  TF_VAR_load_balancer_controller_role_arn: ${{ vars.LOAD_BALANCER_CONTROLLER_ROLE_ARN }}
+  TF_VAR_load_balancer_controller_role_arn: ${{ vars.LOAD_BALANCER_CONTROLLER_ROLE_ARN }}
+  TF_VAR_LOAD_BALANCER_CONTROLLER_ROLE_ARN: ${{ vars.LOAD_BALANCER_CONTROLLER_ROLE_ARN }}
 
 jobs:
   validate:
@@ -29,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
       - run: terraform fmt -check -recursive
-      - run: terraform init -backend=false
+      - run: terraform init -input=false -backend=false
       - run: terraform validate
 
   plan:
@@ -37,36 +51,62 @@ jobs:
     needs: validate
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials (Academy)
+        if: secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' && secrets.AWS_SESSION_TOKEN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC)
+        if: secrets.AWS_ACCESS_KEY_ID == '' || secrets.AWS_SECRET_ACCESS_KEY == '' || secrets.AWS_SESSION_TOKEN == ''
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: terraform init -backend-config=environments/hml/backend.hcl
-      - run: terraform plan -var=environment=hml -out=tfplan
+      - run: terraform init -input=false -backend-config=environments/${{ inputs.environment }}/backend.hcl
+      - run: terraform plan -input=false -var=environment=${{ inputs.environment }} -out=tfplan
       - uses: actions/upload-artifact@v4
         with:
-          name: tfplan
+          name: tfplan-${{ inputs.environment }}
           path: tfplan
-          retention-days: 7
+          retention-days: 1
 
   apply:
     name: Terraform Apply
     needs: plan
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
     runs-on: ubuntu-latest
-    environment: hml-apply
+    environment: ${{ inputs.environment }}-apply
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials (Academy)
+        if: secrets.AWS_ACCESS_KEY_ID != '' && secrets.AWS_SECRET_ACCESS_KEY != '' && secrets.AWS_SESSION_TOKEN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials (OIDC)
+        if: secrets.AWS_ACCESS_KEY_ID == '' || secrets.AWS_SECRET_ACCESS_KEY == '' || secrets.AWS_SESSION_TOKEN == ''
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: terraform init -backend-config=environments/hml/backend.hcl
+      - run: terraform init -input=false -backend-config=environments/${{ inputs.environment }}/backend.hcl
       - uses: actions/download-artifact@v4
         with:
-          name: tfplan
-      - run: terraform apply -auto-approve tfplan
+          name: tfplan-${{ inputs.environment }}
+      - run: terraform apply -input=false -auto-approve tfplan

@@ -1,0 +1,32 @@
+# Agent log
+
+## 2026-08-13
+
+- Replaced nested Terraform backend blocks with root-consumable HML and PROD backend configuration files while preserving state settings.
+- Parameterized manual plan/apply CI by environment, scoped OIDC permissions, preserved plan artifacts for apply, and serialized state operations per environment.
+- Updated repository usage and CI documentation.
+- No Terraform apply, commit, push, or AWS contact was performed.
+
+## 2026-08-15
+
+- Added pinned Helm bootstrap releases for AWS Load Balancer Controller and
+  Metrics Server, using the controller IRSA role.
+- Made the EKS API endpoint private by default, with opt-in CIDR-restricted
+  public access variables.
+- No Terraform apply or remote initialization was performed.
+
+## 2026-08-16
+
+- Added optional EKS cluster and managed node group role ARN inputs for AWS
+  Academy/Lab role reuse while preserving Terraform-created role defaults.
+- Documented `TF_VAR_eks_cluster_role_arn`, `TF_VAR_eks_node_role_arn`, and Lab
+  role ARN discovery.
+- No Terraform apply or remote initialization was performed.
+
+## 2026-08-16 (Load Balancer Controller role reuse)
+
+- Added optional root/module Load Balancer Controller role ARN inputs, preserving
+  Terraform role creation when empty.
+- Wired the GitHub `LOAD_BALANCER_CONTROLLER_ROLE_ARN` variable into
+  `TF_VAR_LOAD_BALANCER_CONTROLLER_ROLE_ARN` and documented `gh variable set`.
+- No Terraform apply or AWS contact was performed.
