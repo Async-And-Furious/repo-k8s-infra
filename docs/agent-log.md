@@ -27,6 +27,17 @@
 
 - Added optional root/module Load Balancer Controller role ARN inputs, preserving
   Terraform role creation when empty.
-- Wired the GitHub `LOAD_BALANCER_CONTROLLER_ROLE_ARN` variable into
-  `TF_VAR_LOAD_BALANCER_CONTROLLER_ROLE_ARN` and documented `gh variable set`.
+- Wired the GitHub `LOAD_BALANCER_CONTROLLER_ROLE_ARN` variable into the
+  canonical lowercase `TF_VAR_load_balancer_controller_role_arn` name and
+  documented `gh variable set`.
 - No Terraform apply or AWS contact was performed.
+
+## 2026-08-22 (bounded deep-review guardrails)
+
+- Removed duplicate/mismatched Terraform role environment entries and made AWS
+  credential selection depend on job environment values; artifact download now
+  has explicit `actions: read` permission.
+- Added validation for public EKS endpoint CIDRs and optional partition-neutral
+  IAM role ARNs. The Load Balancer Controller policy and existing null role
+  output contract were intentionally left unchanged.
+- No Terraform apply, commit, or push was performed.
