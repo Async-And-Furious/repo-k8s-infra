@@ -18,6 +18,23 @@ on:
         default: plan
         type: choice
         options: [plan, apply]
+      aws_academy:
+        description: Use AWS Academy LabRole compatibility mode
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      manage_iam:
+        description: Allow Terraform to create IAM and IRSA resources
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      lab_role_arn:
+        description: Existing LabRole ARN (required when Academy mode is true)
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -32,6 +49,7 @@ env:
   TF_VAR_eks_cluster_role_arn: ${{ vars.EKS_CLUSTER_ROLE_ARN }}
   TF_VAR_eks_node_role_arn: ${{ vars.EKS_NODE_ROLE_ARN }}
   TF_VAR_load_balancer_controller_role_arn: ${{ vars.LOAD_BALANCER_CONTROLLER_ROLE_ARN }}
+  TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
 
 jobs:
   validate:
@@ -47,8 +65,8 @@ jobs:
   plan:
     name: Terraform Plan
     needs: validate
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && (inputs.action == 'plan' || inputs.action == 'apply')
+    runs-on: [self-hosted, linux, eks-private]
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -59,6 +77,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+      - name: Validate Terraform mode
+        if: inputs.aws_academy == 'true'
+        shell: bash
+        env:
+          MANAGE_IAM: ${{ inputs.manage_iam }}
+          LAB_ROLE_ARN: ${{ inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          [[ "$MANAGE_IAM" == "false" ]] || { echo "AWS Academy mode requires manage_iam=false." >&2; exit 1; }
+          [[ -n "$LAB_ROLE_ARN" ]] || { echo "AWS Academy mode requires a non-empty lab_role_arn." >&2; exit 1; }
       - name: Validate AWS credential mode
         shell: bash
         run: |
@@ -86,7 +114,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - run: terraform init -input=false -backend-config=environments/${{ inputs.environment }}/backend.hcl
-      - run: terraform plan -input=false -var=environment=${{ inputs.environment }} -out=tfplan
+      - run: terraform plan -input=false -var=environment=${{ inputs.environment }} -var=aws_academy=${{ inputs.aws_academy }} -var=manage_iam=${{ inputs.manage_iam }} '-var=lab_role_arn=${{ inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN }}' -out=tfplan
       - uses: actions/upload-artifact@v4
         with:
           name: tfplan-${{ inputs.environment }}
@@ -97,7 +125,7 @@ jobs:
     name: Terraform Apply
     needs: plan
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, eks-private]
     environment: ${{ inputs.environment }}-apply
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

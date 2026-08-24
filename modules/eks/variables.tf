@@ -3,6 +3,24 @@ variable "environment" {
   type        = string
 }
 
+variable "aws_academy" {
+  description = "Use the pre-existing LabRole and disable IAM/IRSA resources"
+  type        = bool
+  default     = false
+}
+
+variable "manage_iam" {
+  description = "Allow creation of IAM roles"
+  type        = bool
+  default     = true
+}
+
+variable "lab_role_arn" {
+  description = "Existing LabRole ARN for Academy mode"
+  type        = string
+  default     = ""
+}
+
 variable "vpc_id" {
   description = "VPC id from the vpc module"
   type        = string

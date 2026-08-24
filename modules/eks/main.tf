@@ -12,10 +12,10 @@ module "eks" {
   vpc_id     = var.vpc_id
   subnet_ids = var.private_subnet_ids
 
-  enable_irsa = true
+  enable_irsa = var.manage_iam && !var.aws_academy
 
-  create_iam_role = var.eks_cluster_role_arn == ""
-  iam_role_arn    = var.eks_cluster_role_arn != "" ? var.eks_cluster_role_arn : null
+  create_iam_role = var.manage_iam && !var.aws_academy && var.eks_cluster_role_arn == ""
+  iam_role_arn    = var.aws_academy ? var.lab_role_arn : (var.eks_cluster_role_arn != "" ? var.eks_cluster_role_arn : null)
 
   cluster_addons = {
     coredns    = {}
@@ -29,13 +29,14 @@ module "eks" {
       desired_size    = var.node_desired_size
       min_size        = var.node_min_size
       max_size        = var.node_max_size
-      create_iam_role = var.eks_node_role_arn == ""
-      iam_role_arn    = var.eks_node_role_arn != "" ? var.eks_node_role_arn : null
+      create_iam_role = var.manage_iam && !var.aws_academy && var.eks_node_role_arn == ""
+      iam_role_arn    = var.aws_academy ? var.lab_role_arn : (var.eks_node_role_arn != "" ? var.eks_node_role_arn : null)
     }
   }
 }
 
 data "aws_iam_policy_document" "load_balancer_controller_assume_role" {
+  count = var.aws_academy || !var.manage_iam ? 0 : 1
   statement {
     effect  = "Allow"
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -60,12 +61,13 @@ data "aws_iam_policy_document" "load_balancer_controller_assume_role" {
 }
 
 resource "aws_iam_role" "load_balancer_controller" {
-  count              = var.load_balancer_controller_role_arn == "" ? 1 : 0
+  count              = var.aws_academy || !var.manage_iam || var.load_balancer_controller_role_arn != "" ? 0 : 1
   name               = "tc3-eks-${var.environment}-aws-load-balancer-controller"
-  assume_role_policy = data.aws_iam_policy_document.load_balancer_controller_assume_role.json
+  assume_role_policy = data.aws_iam_policy_document.load_balancer_controller_assume_role[0].json
 }
 
 data "aws_iam_policy_document" "load_balancer_controller" {
+  count = var.aws_academy || !var.manage_iam ? 0 : 1
   statement {
     effect = "Allow"
     actions = [
@@ -99,8 +101,8 @@ data "aws_iam_policy_document" "load_balancer_controller" {
 }
 
 resource "aws_iam_role_policy" "load_balancer_controller" {
-  count  = var.load_balancer_controller_role_arn == "" ? 1 : 0
+  count  = var.aws_academy || !var.manage_iam || var.load_balancer_controller_role_arn != "" ? 0 : 1
   name   = "aws-load-balancer-controller"
   role   = aws_iam_role.load_balancer_controller[0].id
-  policy = data.aws_iam_policy_document.load_balancer_controller.json
+  policy = data.aws_iam_policy_document.load_balancer_controller[0].json
 }

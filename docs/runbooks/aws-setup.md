@@ -170,19 +170,22 @@ Expect the first real `plan` to surface things a `-backend=false` local
 validate can't catch (IAM permission gaps, AZ availability, quota limits)
 — that's normal, budget time to iterate once real credentials exist.
 
-## 10. AWS Academy/Lab existing EKS roles
+## 10. AWS Academy/Lab mode
 
-AWS Academy/Lab credentials may not be allowed to create IAM roles. Pass the
-existing role ARNs through Terraform variables; the EKS module reuses them for
-the control plane and managed node group respectively:
+AWS Academy/Lab credentials may not be allowed to create IAM roles. Use one
+existing `LabRole` for the EKS control plane and managed node group, and disable
+all Terraform IAM/IRSA creation:
 
 ```bash
-export TF_VAR_eks_cluster_role_arn="arn:aws:iam::<ACCOUNT_ID>:role/<CLUSTER_ROLE_NAME>"
-export TF_VAR_eks_node_role_arn="arn:aws:iam::<ACCOUNT_ID>:role/<NODE_ROLE_NAME>"
+export TF_VAR_aws_academy=true
+export TF_VAR_manage_iam=false
+export TF_VAR_lab_role_arn="arn:aws:iam::<ACCOUNT_ID>:role/LabRole"
 ```
 
 Find the active Lab role ARN in the AWS Console under IAM → Roles (commonly
 named `LabRole`), or query it with `aws iam list-roles`. Use the ARN returned
 for the current account/session; do not hardcode an account ID or ARN in
-Terraform. Leave either variable empty to keep the default role creation
-behavior.
+Terraform. In this mode Terraform skips IAM roles, OIDC/IRSA, and the AWS Load
+Balancer Controller Helm release, while retaining Metrics Server. The
+application is exposed through its existing Kubernetes `Service` type
+`LoadBalancer` path.

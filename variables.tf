@@ -13,6 +13,43 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "aws_academy" {
+  description = "Use AWS Academy compatibility mode and the pre-existing LabRole"
+  type        = bool
+  default     = false
+}
+
+variable "manage_iam" {
+  description = "Allow Terraform to create IAM roles and IRSA resources"
+  type        = bool
+  default     = true
+}
+
+variable "lab_role_arn" {
+  description = "Existing LabRole ARN used by the EKS control plane and managed node group in Academy mode"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.lab_role_arn == trimspace(var.lab_role_arn) && (var.lab_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.lab_role_arn)))
+    error_message = "lab_role_arn must be empty or a valid partition-neutral IAM role ARN."
+  }
+}
+
+check "aws_academy_configuration" {
+  assert {
+    condition     = !var.aws_academy || (!var.manage_iam && var.lab_role_arn != "")
+    error_message = "AWS Academy mode requires manage_iam=false and a non-empty lab_role_arn."
+  }
+}
+
+check "load_balancer_controller_role_configuration" {
+  assert {
+    condition     = var.manage_iam || var.aws_academy || var.load_balancer_controller_role_arn != ""
+    error_message = "load_balancer_controller_role_arn is required when manage_iam=false outside AWS Academy mode."
+  }
+}
+
 variable "cluster_endpoint_public_access" {
   description = "Whether the EKS Kubernetes API endpoint is reachable publicly"
   type        = bool

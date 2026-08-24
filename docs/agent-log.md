@@ -41,3 +41,23 @@
   IAM role ARNs. The Load Balancer Controller policy and existing null role
   output contract were intentionally left unchanged.
 - No Terraform apply, commit, or push was performed.
+
+## 2026-08-24 (AWS Academy compatibility)
+
+- Added explicit Academy/IAM mode variables and validated LabRole ARN reuse for
+  the EKS control plane and managed node group.
+- Academy mode disables IAM, OIDC/IRSA, and AWS Load Balancer Controller
+  resources while retaining Metrics Server and the Kubernetes LoadBalancer
+  service path.
+- Added workflow dispatch inputs and documented temporary-credential usage.
+- No infrastructure apply, remote initialization, commit, or push was performed.
+
+## 2026-08-24 (Academy workflow integration)
+
+- Added explicit plan/apply dispatch gating and required Academy mode checks.
+- Moved manual Terraform plan/apply jobs to the `self-hosted`, `linux`,
+  `eks-private` runner labels; credential-free validation remains on
+  `ubuntu-latest`.
+- Required a pre-existing Load Balancer Controller role when IAM management is
+  disabled outside Academy mode.
+- No Terraform apply, commit, push, or merge was performed.
