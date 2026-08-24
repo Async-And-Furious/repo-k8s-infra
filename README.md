@@ -78,12 +78,14 @@ gh variable set LOAD_BALANCER_CONTROLLER_ROLE_ARN --body "arn:aws:iam::<ACCOUNT_
 
 Pull requests and pushes to `main` or `develop` run format and validation checks only on
 `ubuntu-latest` without AWS credentials. Manual dispatch selects `hml` or `prod` and
-`plan` or `apply`; both operations run on the self-hosted runner labels
-`self-hosted`, `linux`, and `eks-private` so the private EKS endpoint and Helm
-provider are reachable. Plans use an environment-qualified artifact retained for one
-day; apply downloads that exact artifact and is gated by the protected `hml-apply` or
-`prod-apply` GitHub Environment. State operations for the same environment do not run
-concurrently.
+`plan` or `apply`. Normal mode uses the self-hosted runner labels `self-hosted`,
+`linux`, and `eks-private` so the private EKS endpoint and Helm provider are reachable.
+Academy mode uses `ubuntu-latest`; each Academy plan/apply fetches GitHub's `/meta`
+Actions CIDR allowlist and makes the EKS API endpoint public only for those CIDRs.
+The allowlist can change, so rerun plan/apply when a session is retried; no unrestricted
+CIDR is used. Plans use an environment-qualified artifact retained for one day; apply
+downloads that exact artifact and is gated by the protected `hml-apply` or `prod-apply`
+GitHub Environment. State operations for the same environment do not run concurrently.
 
 Manual dispatch exposes `aws_academy`, `manage_iam`, and `lab_role_arn`. Select
 `aws_academy=true`, `manage_iam=false`, and paste the current LabRole ARN into

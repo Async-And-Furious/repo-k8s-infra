@@ -189,3 +189,10 @@ Terraform. In this mode Terraform skips IAM roles, OIDC/IRSA, and the AWS Load
 Balancer Controller Helm release, while retaining Metrics Server. The
 application is exposed through its existing Kubernetes `Service` type
 `LoadBalancer` path.
+
+Manual GitHub Actions plan/apply runs in Academy mode on `ubuntu-latest`, not on the
+private self-hosted runner. The workflow fetches `https://api.github.com/meta` and
+passes the compact `.actions` CIDR list to Terraform, enabling the EKS public API
+endpoint only for GitHub Actions' current published ranges. It never uses an
+unrestricted CIDR; because GitHub's allowlist can change, a retry refreshes it and
+may require a new plan.

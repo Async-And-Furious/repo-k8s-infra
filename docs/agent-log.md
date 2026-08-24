@@ -61,3 +61,12 @@
 - Required a pre-existing Load Balancer Controller role when IAM management is
   disabled outside Academy mode.
 - No Terraform apply, commit, push, or merge was performed.
+
+## 2026-08-24 (Academy hosted runner access)
+
+- Academy plan/apply now use `ubuntu-latest`; normal mode retains the private
+  self-hosted runner labels.
+- Academy jobs allowlist the current GitHub Actions CIDRs for the public EKS API
+  endpoint without using an unrestricted CIDR; LabRole/IAM-disabled behavior and
+  workflow action inputs remain unchanged.
+- No Terraform apply, commit, or push was performed.

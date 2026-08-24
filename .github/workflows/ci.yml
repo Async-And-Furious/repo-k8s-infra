@@ -66,7 +66,7 @@ jobs:
     name: Terraform Plan
     needs: validate
     if: github.event_name == 'workflow_dispatch' && (inputs.action == 'plan' || inputs.action == 'apply')
-    runs-on: [self-hosted, linux, eks-private]
+    runs-on: ${{ inputs.aws_academy == 'true' && 'ubuntu-latest' || fromJSON('["self-hosted","linux","eks-private"]') }}
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -77,6 +77,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+      - name: Allow GitHub Actions to reach Academy EKS
+        if: inputs.aws_academy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          actions_cidrs="$(curl -fsSL -H 'Accept: application/vnd.github+json' https://api.github.com/meta | jq -cer '.actions | if type == "array" and length > 0 and all(.[]; . != "0.0.0.0/0") then . else error("GitHub Actions CIDR response is empty or too broad") end')"
+          printf 'TF_VAR_cluster_endpoint_public_access=true\n' >> "$GITHUB_ENV"
+          printf 'TF_VAR_cluster_endpoint_public_access_cidrs=%s\n' "$actions_cidrs" >> "$GITHUB_ENV"
       - name: Validate Terraform mode
         if: inputs.aws_academy == 'true'
         shell: bash
@@ -125,7 +133,7 @@ jobs:
     name: Terraform Apply
     needs: plan
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
-    runs-on: [self-hosted, linux, eks-private]
+    runs-on: ${{ inputs.aws_academy == 'true' && 'ubuntu-latest' || fromJSON('["self-hosted","linux","eks-private"]') }}
     environment: ${{ inputs.environment }}-apply
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -138,6 +146,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+      - name: Allow GitHub Actions to reach Academy EKS
+        if: inputs.aws_academy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          actions_cidrs="$(curl -fsSL -H 'Accept: application/vnd.github+json' https://api.github.com/meta | jq -cer '.actions | if type == "array" and length > 0 and all(.[]; . != "0.0.0.0/0") then . else error("GitHub Actions CIDR response is empty or too broad") end')"
+          printf 'TF_VAR_cluster_endpoint_public_access=true\n' >> "$GITHUB_ENV"
+          printf 'TF_VAR_cluster_endpoint_public_access_cidrs=%s\n' "$actions_cidrs" >> "$GITHUB_ENV"
       - name: Validate AWS credential mode
         shell: bash
         run: |
