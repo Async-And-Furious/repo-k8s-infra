@@ -12,5 +12,10 @@ terraform {
     }
   }
 
-  backend "remote" {}
+  backend "remote" {
+    organization = "async_furious"
+    workspaces {
+      name = "tc3-k8s-hml"
+    }
+  }
 }

@@ -47,17 +47,12 @@ exists. Run from the repository root:
 export TF_TOKEN_app_terraform_io="$TF_API_TOKEN"
 
 # HML
-terraform init -reconfigure -input=false \
-  -backend-config=organization=async_furious \
-  -backend-config=workspaces.name=tc3-k8s-hml
+terraform init -reconfigure -input=false
 terraform plan -input=false -var=environment=hml
-
-# PROD
-terraform init -reconfigure -input=false \
-  -backend-config=organization=async_furious \
-  -backend-config=workspaces.name=tc3-k8s-prod
-terraform plan -input=false -var=environment=prod
 ```
+
+The root configuration currently targets the HML workspace. Change the root
+backend workspace before running against production.
 
 Create the `TF_API_TOKEN` GitHub Actions secret before running the workflow.
 It is used only to access HCP Terraform state. Do not add AWS credentials to

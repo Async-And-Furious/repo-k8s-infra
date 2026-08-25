@@ -1,5 +1,12 @@
 # Agent log
 
+## 2026-08-24 (HML remote backend initialization)
+
+- Configured the root remote backend for the `tc3-k8s-hml` HCP Terraform
+  workspace and removed invalid remote backend CLI overrides from plan/apply.
+- Preserved Academy credential, runner, CIDR, LabRole, and IAM behavior.
+- No Terraform apply was performed.
+
 ## 2026-08-24 (HCP Terraform state)
 
 - Replaced the S3 backend with HCP Terraform's remote state backend using local
