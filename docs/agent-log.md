@@ -70,3 +70,13 @@
   endpoint without using an unrestricted CIDR; LabRole/IAM-disabled behavior and
   workflow action inputs remain unchanged.
 - No Terraform apply, commit, or push was performed.
+
+## 2026-08-24 (Academy IAM session-context fix)
+
+- Vendored the resolved terraform-aws-modules/eks/aws v20.37.2 runtime module,
+  including its required nested modules, and gated only its IAM session-context
+  data source on creator-admin permissions.
+- Academy mode explicitly disables creator-admin permissions while retaining
+  LabRole selection and no IAM/IRSA/ALB role creation.
+- Terraform fmt, backendless init, and validate passed. AWS Academy plan was
+  not run because the local AWS CLI failed before credentials could be checked.

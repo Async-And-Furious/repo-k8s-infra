@@ -1,6 +1,8 @@
 module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.31"
+  source = "../../vendor/eks"
+
+  # Keep the Academy path from querying iam:GetRole for the assumed voclabs session.
+  enable_cluster_creator_admin_permissions = var.aws_academy ? false : null
 
   cluster_name    = "tc3-eks-${var.environment}"
   cluster_version = var.cluster_version
