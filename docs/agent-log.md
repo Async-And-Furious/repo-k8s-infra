@@ -1,5 +1,13 @@
 # Agent log
 
+## 2026-08-24 (HCP Terraform state)
+
+- Replaced the S3 backend with HCP Terraform's remote state backend using local
+  execution and environment-specific `tc3-k8s-*` workspaces.
+- Updated CI and runbooks to use `TF_API_TOKEN`; AWS credentials remain in
+  GitHub and Academy hosted-runner/CIDR/LabRole behavior is unchanged.
+- No Terraform apply, commit, or push was performed.
+
 ## 2026-08-13
 
 - Replaced nested Terraform backend blocks with root-consumable HML and PROD backend configuration files while preserving state settings.

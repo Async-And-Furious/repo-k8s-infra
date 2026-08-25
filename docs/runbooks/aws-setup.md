@@ -101,7 +101,8 @@ written in both repos:
 - RDS (`aws_db_instance`, subnet group, security group)
 - Secrets Manager (read/describe — needed because RDS's
   `manage_master_user_password` creates a secret automatically)
-- S3 + DynamoDB (for the remote state backend itself, see §5)
+- HCP Terraform state access is configured separately with the `TF_API_TOKEN`
+  GitHub secret; AWS credentials are not stored in HCP Terraform.
 
 For a class project, `PowerUserAccess` managed policy attached to this
 role is the pragmatic shortcut (avoids hand-writing a huge least-privilege
@@ -109,28 +110,19 @@ JSON policy for a handful of resource types). If whoever owns the AWS
 account wants tighter scoping instead, say so and I'll write the explicit
 policy document.
 
-## 5. Provision the Terraform remote state backend
+## 5. Configure HCP Terraform state
 
-This has to exist **before** `terraform init` (against the real backend,
-not `-backend=false`) works in either repo's pipeline. Names must match
-exactly what's already in the code:
+Terraform state is stored in HCP Terraform using local execution. The
+`async_furious` organization uses these workspace names:
 
-```bash
-aws s3api create-bucket --bucket tc3-terraform-state --region us-east-1
-aws s3api put-bucket-versioning --bucket tc3-terraform-state \
-  --versioning-configuration Status=Enabled
-aws s3api put-bucket-encryption --bucket tc3-terraform-state \
-  --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+- `tc3-k8s-hml` (already exists)
+- `tc3-k8s-prod`
 
-aws dynamodb create-table \
-  --table-name tc3-terraform-locks \
-  --attribute-definitions AttributeName=LockID,AttributeType=S \
-  --key-schema AttributeName=LockID,KeyType=HASH \
-  --billing-mode PAY_PER_REQUEST
-```
-
-Referenced from: `repo-k8s-infra/environments/{hml,prod}/backend.tf` and
-`repo-db-infra/environments/{hml,prod}/backend.tf`.
+Create/configure the production workspace in HCP Terraform and select
+**Local** execution mode. In GitHub, create the required `TF_API_TOKEN`
+Actions secret. The workflow passes it as `TF_TOKEN_app_terraform_io`.
+Never store AWS access keys, session tokens, or other AWS credentials in HCP
+Terraform; Academy credentials remain GitHub secrets.
 
 ## 6. Set the repo variable in GitHub
 
@@ -157,7 +149,7 @@ This is what the `apply` job in each repo's `ci.yml` targets
 
 1. OIDC provider (§2) — once per account.
 2. IAM role + trust policy + permissions (§3–4).
-3. S3 bucket + DynamoDB table (§5).
+3. HCP Terraform workspaces and `TF_API_TOKEN` secret (§5).
 4. `AWS_ROLE_ARN` repo variable in both repos (§6).
 5. `hml-apply` environment in both repos (§7).
 6. Merge the pending CI/CD PRs (repo-k8s-infra #1, repo-db-infra #1) and

@@ -22,6 +22,10 @@ terraform init -backend=false
 terraform validate
 ```
 
+Local validation does not contact HCP Terraform. For a real local plan, set
+`TF_TOKEN_app_terraform_io` (or log in with `terraform login`) and use the HCP
+Terraform workspace for the target environment.
+
 ## Bootstrap prerequisites
 
 - Terraform >= 1.8 and AWS CLI configured for the target account.
@@ -33,19 +37,31 @@ terraform validate
   provider uses `aws eks get-token`.
 - Do not apply until the EKS cluster and node group prerequisites are ready.
 
-## Backend and plans
+## HCP Terraform state and plans
 
-Run from the repository root. Each environment uses a separate S3 state key.
+State is stored in HCP Terraform and Terraform commands execute locally. The
+workspace names are `tc3-k8s-hml` and `tc3-k8s-prod`; the HML workspace already
+exists. Run from the repository root:
 
 ```bash
+export TF_TOKEN_app_terraform_io="$TF_API_TOKEN"
+
 # HML
-terraform init -reconfigure -input=false -backend-config=environments/hml/backend.hcl
+terraform init -reconfigure -input=false \
+  -backend-config=organization=async_furious \
+  -backend-config=workspaces.name=tc3-k8s-hml
 terraform plan -input=false -var=environment=hml
 
 # PROD
-terraform init -reconfigure -input=false -backend-config=environments/prod/backend.hcl
+terraform init -reconfigure -input=false \
+  -backend-config=organization=async_furious \
+  -backend-config=workspaces.name=tc3-k8s-prod
 terraform plan -input=false -var=environment=prod
 ```
+
+Create the `TF_API_TOKEN` GitHub Actions secret before running the workflow.
+It is used only to access HCP Terraform state. Do not add AWS credentials to
+HCP Terraform; Academy AWS credentials remain GitHub secrets.
 
 ### AWS Academy/Lab mode
 
@@ -96,6 +112,8 @@ OIDC path. For an AWS Academy session, configure these repository secrets togeth
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_SESSION_TOKEN`
+
+- `TF_API_TOKEN` (HCP Terraform token; required by plan/apply)
 
 The workflow uses the temporary credentials only when all three secrets are present; otherwise it falls back to OIDC. Rotate the secrets after every AWS Academy session with `gh secret set` (never commit or print their values).
 

@@ -71,6 +71,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     permissions:
       contents: read
       id-token: write
@@ -125,7 +126,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: terraform init -input=false -backend-config=environments/${{ inputs.environment }}/backend.hcl
+      - run: terraform init -reconfigure -input=false -backend-config=organization=async_furious -backend-config=workspaces.name=tc3-k8s-${{ inputs.environment }}
       - run: terraform plan -input=false -var=environment=${{ inputs.environment }} -var=aws_academy=${{ inputs.aws_academy }} -var=manage_iam=${{ inputs.manage_iam }} '-var=lab_role_arn=${{ inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN }}' -out=tfplan
       - uses: actions/upload-artifact@v4
         with:
@@ -143,6 +144,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     permissions:
       contents: read
       id-token: write
@@ -188,7 +190,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: terraform init -input=false -backend-config=environments/${{ inputs.environment }}/backend.hcl
+      - run: terraform init -reconfigure -input=false -backend-config=organization=async_furious -backend-config=workspaces.name=tc3-k8s-${{ inputs.environment }}
       - uses: actions/download-artifact@v4
         with:
           name: tfplan-${{ inputs.environment }}
