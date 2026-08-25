@@ -78,18 +78,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - name: Allow GitHub Actions to reach Academy EKS
-        if: inputs.aws_academy == 'true'
+      - name: Prepare Terraform variables
         shell: bash
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          AWS_ACADEMY: ${{ inputs.aws_academy }}
+          MANAGE_IAM: ${{ inputs.manage_iam }}
+          LAB_ROLE_ARN: ${{ inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN }}
         run: |
           set -euo pipefail
-          curl -fsSL -H 'Accept: application/vnd.github+json' https://api.github.com/meta |
-            jq -ce '{
-              cluster_endpoint_public_access: true,
-              cluster_endpoint_public_access_cidrs: (.actions |
-                if type == "array" and length > 0 and all(.[]; . != "0.0.0.0/0") then .
-                else error("GitHub Actions CIDR response is empty or too broad") end)
-            }' > academy.auto.tfvars.json
+          if [[ "$AWS_ACADEMY" == "true" ]]; then
+            curl -fsSL -H 'Accept: application/vnd.github+json' https://api.github.com/meta |
+              jq -ce --arg environment "$ENVIRONMENT" \
+                --argjson aws_academy "$AWS_ACADEMY" \
+                --argjson manage_iam "$MANAGE_IAM" \
+                --arg lab_role_arn "$LAB_ROLE_ARN" '{
+                  environment: $environment,
+                  aws_academy: $aws_academy,
+                  manage_iam: $manage_iam,
+                  lab_role_arn: $lab_role_arn,
+                  cluster_endpoint_public_access: true,
+                  cluster_endpoint_public_access_cidrs: (.actions |
+                    if type == "array" and length > 0 and all(.[]; . != "0.0.0.0/0") then .
+                    else error("GitHub Actions CIDR response is empty or too broad") end)
+                }' > terraform.auto.tfvars.json
+          else
+            jq -n --arg environment "$ENVIRONMENT" \
+              --argjson aws_academy "$AWS_ACADEMY" \
+              --argjson manage_iam "$MANAGE_IAM" \
+              --arg lab_role_arn "$LAB_ROLE_ARN" '{
+                environment: $environment,
+                aws_academy: $aws_academy,
+                manage_iam: $manage_iam,
+                lab_role_arn: $lab_role_arn
+              }' > terraform.auto.tfvars.json
+          fi
       - name: Validate Terraform mode
         if: inputs.aws_academy == 'true'
         shell: bash
@@ -127,12 +150,7 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - run: terraform init -reconfigure -input=false
-      - run: terraform plan -input=false -var=environment=${{ inputs.environment }} -var=aws_academy=${{ inputs.aws_academy }} -var=manage_iam=${{ inputs.manage_iam }} '-var=lab_role_arn=${{ inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN }}' -out=tfplan
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ inputs.environment }}
-          path: tfplan
-          retention-days: 1
+      - run: terraform plan -input=false
 
   apply:
     name: Terraform Apply
@@ -152,18 +170,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
-      - name: Allow GitHub Actions to reach Academy EKS
-        if: inputs.aws_academy == 'true'
+      - name: Prepare Terraform variables
         shell: bash
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          AWS_ACADEMY: ${{ inputs.aws_academy }}
+          MANAGE_IAM: ${{ inputs.manage_iam }}
+          LAB_ROLE_ARN: ${{ inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN }}
         run: |
           set -euo pipefail
-          curl -fsSL -H 'Accept: application/vnd.github+json' https://api.github.com/meta |
-            jq -ce '{
-              cluster_endpoint_public_access: true,
-              cluster_endpoint_public_access_cidrs: (.actions |
-                if type == "array" and length > 0 and all(.[]; . != "0.0.0.0/0") then .
-                else error("GitHub Actions CIDR response is empty or too broad") end)
-            }' > academy.auto.tfvars.json
+          if [[ "$AWS_ACADEMY" == "true" ]]; then
+            curl -fsSL -H 'Accept: application/vnd.github+json' https://api.github.com/meta |
+              jq -ce --arg environment "$ENVIRONMENT" \
+                --argjson aws_academy "$AWS_ACADEMY" \
+                --argjson manage_iam "$MANAGE_IAM" \
+                --arg lab_role_arn "$LAB_ROLE_ARN" '{
+                  environment: $environment,
+                  aws_academy: $aws_academy,
+                  manage_iam: $manage_iam,
+                  lab_role_arn: $lab_role_arn,
+                  cluster_endpoint_public_access: true,
+                  cluster_endpoint_public_access_cidrs: (.actions |
+                    if type == "array" and length > 0 and all(.[]; . != "0.0.0.0/0") then .
+                    else error("GitHub Actions CIDR response is empty or too broad") end)
+                }' > terraform.auto.tfvars.json
+          else
+            jq -n --arg environment "$ENVIRONMENT" \
+              --argjson aws_academy "$AWS_ACADEMY" \
+              --argjson manage_iam "$MANAGE_IAM" \
+              --arg lab_role_arn "$LAB_ROLE_ARN" '{
+                environment: $environment,
+                aws_academy: $aws_academy,
+                manage_iam: $manage_iam,
+                lab_role_arn: $lab_role_arn
+              }' > terraform.auto.tfvars.json
+          fi
       - name: Validate AWS credential mode
         shell: bash
         run: |
@@ -191,7 +232,4 @@ jobs:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - run: terraform init -reconfigure -input=false
-      - uses: actions/download-artifact@v4
-        with:
-          name: tfplan-${{ inputs.environment }}
-      - run: terraform apply -input=false -auto-approve tfplan
+      - run: terraform apply -input=false -auto-approve

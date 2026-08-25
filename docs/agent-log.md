@@ -1,5 +1,12 @@
 # Agent log
 
+## 2026-08-24 (Terraform remote backend local execution)
+
+- Switched manual plan/apply to generated local auto tfvars, removing remote
+  backend-incompatible CLI variables and plan artifact transfer.
+- Preserved Academy public endpoint CIDR validation and normal-mode behavior.
+- No Terraform apply was performed.
+
 ## 2026-08-24 (HML remote backend initialization)
 
 - Configured the root remote backend for the `tc3-k8s-hml` HCP Terraform
