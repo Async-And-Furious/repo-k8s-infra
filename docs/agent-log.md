@@ -1,5 +1,13 @@
 # Agent log
 
+## 2026-08-26 (Direct apply workflow)
+
+- Terraform apply now runs directly after validation; the plan job remains
+  limited to explicit plan dispatches.
+- Preserved generated auto tfvars, HCP remote state initialization, Academy
+  guardrails, environment approvals, and Terraform state locking.
+- Terraform apply was not performed.
+
 ## 2026-08-24 (Terraform remote backend local execution)
 
 - Switched manual plan/apply to generated local auto tfvars, removing remote
