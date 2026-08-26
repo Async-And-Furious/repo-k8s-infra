@@ -1,8 +1,39 @@
+data "aws_caller_identity" "current" {}
+
+locals {
+  # An Academy session is an assumed "voclabs" session, not LabRole itself, so the
+  # caller gets no cluster access from iam_role_arn. Derive the caller's IAM role
+  # ARN by splitting the assumed-role ARN rather than calling iam:GetRole, which
+  # the lab account denies -- that denial is why
+  # enable_cluster_creator_admin_permissions has to stay off here.
+  caller_is_assumed_role = length(regexall("assumed-role", data.aws_caller_identity.current.arn)) > 0
+  caller_role_arn = local.caller_is_assumed_role ? format(
+    "arn:aws:iam::%s:role/%s",
+    data.aws_caller_identity.current.account_id,
+    split("/", data.aws_caller_identity.current.arn)[1],
+  ) : ""
+
+  # Both the session role and LabRole get cluster-admin so Terraform's helm
+  # provider and the application pipeline's kubectl can reach the API server.
+  academy_access_entries = var.aws_academy ? {
+    for arn in distinct(compact([local.caller_role_arn, var.lab_role_arn])) : arn => {
+      principal_arn = arn
+      policy_associations = {
+        admin = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    }
+  } : {}
+}
+
 module "eks" {
   source = "../../vendor/eks"
 
   # Keep the Academy path from querying iam:GetRole for the assumed voclabs session.
   enable_cluster_creator_admin_permissions = var.aws_academy ? false : null
+  access_entries                           = local.academy_access_entries
 
   cluster_name    = "tc3-eks-${var.environment}"
   cluster_version = var.cluster_version
