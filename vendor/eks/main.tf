@@ -769,9 +769,7 @@ resource "aws_eks_addon" "this" {
   }
 
   depends_on = [
-    module.fargate_profile,
     module.eks_managed_node_group,
-    module.self_managed_node_group,
   ]
 
   tags = merge(var.tags, try(each.value.tags, {}))

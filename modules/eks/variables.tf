@@ -31,11 +31,6 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
-variable "public_subnet_ids" {
-  description = "Public subnet ids from the vpc module (internet-facing load balancers, if any)"
-  type        = list(string)
-}
-
 variable "cluster_endpoint_public_access" {
   description = "Whether the EKS Kubernetes API endpoint is reachable publicly"
   type        = bool

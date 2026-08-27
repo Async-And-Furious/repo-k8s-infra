@@ -42,15 +42,3 @@ output "node_security_group_id" {
 output "ecr_repository_url" {
   value = module.ecr.repository_url
 }
-
-output "internal_alb_contract" {
-  description = "RFC-003 contract for the controller-managed internal ALB"
-  value = {
-    scheme                 = "internal"
-    ingress_class          = "alb"
-    load_balancer_name_tag = "tc3-${var.environment}-internal"
-    controller_role_arn    = module.eks.load_balancer_controller_role_arn
-    dns_name               = null
-    arn                    = null
-  }
-}

@@ -22,13 +22,13 @@ terraform init -backend=false
 terraform validate
 ```
 
-Local validation does not contact HCP Terraform. For a real local plan, set
-`TF_TOKEN_app_terraform_io` (or log in with `terraform login`) and use the HCP
-Terraform workspace for the target environment.
+Local validation does not initialize or contact the remote S3 backend. For a
+real local plan, configure AWS credentials and follow the S3 backend steps
+below.
 
 ## Bootstrap prerequisites
 
-- Terraform >= 1.8 and AWS CLI configured for the target account.
+- Terraform >= 1.11 and AWS CLI configured for the target account.
 - Helm provider initialization requires network access to the Terraform
   Registry; the Helm charts are fetched from their pinned repositories during
   apply.
@@ -37,26 +37,24 @@ Terraform workspace for the target environment.
   provider uses `aws eks get-token`.
 - Do not apply until the EKS cluster and node group prerequisites are ready.
 
-## HCP Terraform state and plans
+## S3 Terraform state and plans
 
-State is stored in HCP Terraform and Terraform commands execute locally. The
-workspace names are `tc3-k8s-hml` and `tc3-k8s-prod`; the HML workspace already
-exists. Run from the repository root:
+State is stored in the account-qualified S3 bucket
+`tc3-tfstate-<ACCOUNT_ID>` under
+`repo-k8s-infra/<environment>/terraform.tfstate`. The generated backend
+configuration enables S3 native locking with `use_lockfile = true`; no
+DynamoDB lock table is used. With AWS credentials configured for the target
+account, run from the repository root:
 
 ```bash
-export TF_TOKEN_app_terraform_io="$TF_API_TOKEN"
-
 # HML
-terraform init -reconfigure -input=false
+bash .github/scripts/bootstrap-backend.sh repo-k8s-infra hml
+terraform init -reconfigure -input=false -backend-config=backend.hcl
 terraform plan -input=false -var=environment=hml
 ```
 
-The root configuration currently targets the HML workspace. Change the root
-backend workspace before running against production.
-
-Create the `TF_API_TOKEN` GitHub Actions secret before running the workflow.
-It is used only to access HCP Terraform state. Do not add AWS credentials to
-HCP Terraform; Academy AWS credentials remain GitHub secrets.
+The workflow runs the same backend bootstrap for the selected environment.
+The bucket is versioned, encrypted, and blocked from public access.
 
 ### AWS Academy/Lab mode
 
@@ -94,9 +92,9 @@ Pull requests and pushes to `main` or `develop` run format and validation checks
 Academy mode uses `ubuntu-latest`; each Academy plan/apply fetches GitHub's `/meta`
 Actions CIDR allowlist and makes the EKS API endpoint public only for those CIDRs.
 The allowlist can change, so rerun plan/apply when a session is retried; no unrestricted
-CIDR is used. Plans use an environment-qualified artifact retained for one day; apply
-downloads that exact artifact and is gated by the protected `hml-apply` or `prod-apply`
-GitHub Environment. State operations for the same environment do not run concurrently.
+CIDR is used. Manual plan and apply operations run directly against the selected
+environment's S3 state. Production apply requires `confirm="APPLY PROD"`; state
+operations for the same environment do not run concurrently.
 
 Manual dispatch exposes `aws_academy`, `manage_iam`, and `lab_role_arn`. Select
 `aws_academy=true`, `manage_iam=false`, and paste the current LabRole ARN into
@@ -108,11 +106,7 @@ OIDC path. For an AWS Academy session, configure these repository secrets togeth
 - `AWS_SECRET_ACCESS_KEY`
 - `AWS_SESSION_TOKEN`
 
-- `TF_API_TOKEN` (HCP Terraform token; required by plan/apply)
-
 The workflow uses the temporary credentials only when all three secrets are present; otherwise it falls back to OIDC. Rotate the secrets after every AWS Academy session with `gh secret set` (never commit or print their values).
-
-No Terraform apply or infrastructure deployment is claimed by this repository update.
 
 ## Naming convention
 
