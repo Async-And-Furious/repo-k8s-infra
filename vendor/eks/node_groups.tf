@@ -227,6 +227,8 @@ resource "aws_security_group" "node" {
   }
 }
 
+# HML nodes use private subnets plus NAT until endpoint-based egress is implemented.
+#trivy:ignore:AWS-0104:exp:2026-09-30
 resource "aws_security_group_rule" "node" {
   for_each = { for k, v in merge(
     local.efa_security_group_rules,
