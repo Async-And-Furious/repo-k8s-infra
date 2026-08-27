@@ -40,8 +40,10 @@ outputs.
 - `repo-db-infra` must be applied after `repo-k8s-infra` (provisioning
   order per HANDOFF.md §6.4: network before database).
 - Output values are passed via a `terraform_remote_state` data source in
-  `repo-db-infra` pointed at the HCP Terraform workspace
-  `tc3-k8s-${environment}` in the `async_furious` organization. `vpc_id`/`private_subnet_ids` still
+  `repo-db-infra` pointed at the account-qualified S3 bucket
+  `tc3-tfstate-<ACCOUNT_ID>` and key
+  `repo-k8s-infra/${environment}/terraform.tfstate`. S3 native lockfiles are
+  enabled and no DynamoDB lock table is used. `vpc_id`/`private_subnet_ids` still
   accept manual overrides; `allowed_security_group_ids` always includes
   the EKS node group SG plus any extras. This only resolves once
   `repo-k8s-infra`'s state has actually been applied for that environment

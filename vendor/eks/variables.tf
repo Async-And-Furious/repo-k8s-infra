@@ -633,38 +633,6 @@ variable "node_iam_role_tags" {
 }
 
 ################################################################################
-# Fargate
-################################################################################
-
-variable "fargate_profiles" {
-  description = "Map of Fargate Profile definitions to create"
-  type        = any
-  default     = {}
-}
-
-variable "fargate_profile_defaults" {
-  description = "Map of Fargate Profile default configurations"
-  type        = any
-  default     = {}
-}
-
-################################################################################
-# Self Managed Node Group
-################################################################################
-
-variable "self_managed_node_groups" {
-  description = "Map of self-managed node group definitions to create"
-  type        = any
-  default     = {}
-}
-
-variable "self_managed_node_group_defaults" {
-  description = "Map of self-managed node group default configurations"
-  type        = any
-  default     = {}
-}
-
-################################################################################
 # EKS Managed Node Group
 ################################################################################
 
