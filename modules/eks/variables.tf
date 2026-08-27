@@ -54,6 +54,11 @@ variable "cluster_endpoint_public_access_cidrs" {
     condition     = !var.cluster_endpoint_public_access || length(var.cluster_endpoint_public_access_cidrs) > 0
     error_message = "At least one CIDR is required when cluster_endpoint_public_access is true."
   }
+
+  validation {
+    condition     = length(var.cluster_endpoint_public_access_cidrs) <= 40
+    error_message = "cluster_endpoint_public_access_cidrs cannot contain more than 40 CIDRs."
+  }
 }
 
 variable "eks_cluster_role_arn" {
