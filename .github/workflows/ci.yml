@@ -86,6 +86,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      CLUSTER_NAME: tc3-eks-${{ inputs.environment }}
     steps:
       - name: Guard production apply
         if: inputs.environment == 'prod' && inputs.action == 'apply'
@@ -97,26 +98,41 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.13"
+      - name: Discover Academy HML runner address
+        if: inputs.aws_academy == 'true' && inputs.environment == 'hml'
+        shell: bash
+        run: |
+          set -euo pipefail
+          address="$(curl -fsSL --proto '=https' https://checkip.amazonaws.com)"
+          RUNNER_CIDR="$(python3 - "$address" <<'PY'
+          import ipaddress
+          import sys
+
+          address = ipaddress.ip_address(sys.argv[1].strip())
+          if address.version != 4 or not address.is_global:
+              raise SystemExit("Runner address is not a globally routable IPv4 address")
+          print(f"{address}/32")
+          PY
+          )"
+          echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
       - name: Prepare Terraform variables
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$AWS_ACADEMY" == "true" ]]; then
-            curl -fsSL -H 'Accept: application/vnd.github+json' https://api.github.com/meta |
-              jq -ce --arg environment "$ENVIRONMENT" \
-                --arg aws_region "$AWS_REGION" \
-                --argjson aws_academy "$AWS_ACADEMY" \
-                --argjson manage_iam "$MANAGE_IAM" \
-                --arg lab_role_arn "$LAB_ROLE_ARN" '{
+          if [[ "$AWS_ACADEMY" == "true" && "$ENVIRONMENT" == "hml" ]]; then
+            jq -n --arg environment "$ENVIRONMENT" \
+              --arg aws_region "$AWS_REGION" \
+              --argjson aws_academy "$AWS_ACADEMY" \
+              --argjson manage_iam "$MANAGE_IAM" \
+              --arg lab_role_arn "$LAB_ROLE_ARN" \
+              --arg runner_cidr "$RUNNER_CIDR" '{
                   environment: $environment,
                   aws_region: $aws_region,
                   aws_academy: $aws_academy,
                   manage_iam: $manage_iam,
                   lab_role_arn: $lab_role_arn,
                   cluster_endpoint_public_access: true,
-                  cluster_endpoint_public_access_cidrs: (.actions |
-                    if type == "array" and length > 0 and all(.[]; . != "0.0.0.0/0") then .
-                    else error("GitHub Actions CIDR response is empty or too broad") end)
+                  cluster_endpoint_public_access_cidrs: [$runner_cidr]
                 }' > terraform.auto.tfvars.json
           else
             jq -n --arg environment "$ENVIRONMENT" \
@@ -164,6 +180,52 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Allow Academy HML runner to reach existing EKS cluster
+        if: inputs.aws_academy == 'true' && inputs.environment == 'hml'
+        shell: bash
+        run: |
+          set -euo pipefail
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
+            private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
+            public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
+            public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
+            status=""
+            if [[ "$private_access" == "True" && "$public_access" == "True" && "$public_cidrs" == "$RUNNER_CIDR" ]]; then
+              status="Successful"
+              echo "EKS endpoint already allows only this runner."
+            else
+            update_id=""
+            for attempt in {1..60}; do
+              if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "endpointPrivateAccess=true,endpointPublicAccess=true,publicAccessCidrs=$RUNNER_CIDR" --query update.id --output text 2>"$error_file")"; then
+                break
+              fi
+              if grep -q 'ResourceInUseException' "$error_file"; then
+                sleep 10
+              else
+                cat "$error_file" >&2
+                exit 1
+              fi
+            done
+            [[ -n "$update_id" ]] || { echo "Timed out waiting to start EKS endpoint update." >&2; exit 1; }
+            for attempt in {1..60}; do
+              status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+              [[ "$status" == "Successful" ]] && break
+              if [[ "$status" != "InProgress" ]]; then
+                aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2
+                exit 1
+              fi
+              sleep 10
+            done
+            fi
+            [[ "$status" == "Successful" ]] || { echo "Timed out waiting for EKS endpoint update." >&2; exit 1; }
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster does not exist yet; Terraform will create it."
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
       - name: Bootstrap Terraform state backend
         shell: bash
         run: bash .github/scripts/bootstrap-backend.sh repo-k8s-infra "$ENVIRONMENT"
@@ -174,6 +236,51 @@ jobs:
       - name: Terraform apply
         if: inputs.action == 'apply'
         run: terraform apply -input=false -auto-approve
+      - name: Disable Academy HML public EKS endpoint
+        if: always() && inputs.aws_academy == 'true' && inputs.environment == 'hml'
+        shell: bash
+        run: |
+          set -euo pipefail
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
+            private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
+            public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
+            status=""
+            if [[ "$private_access" == "True" && "$public_access" == "False" ]]; then
+              status="Successful"
+              echo "EKS public endpoint is already disabled."
+            else
+            update_id=""
+            for attempt in {1..60}; do
+              if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config endpointPrivateAccess=true,endpointPublicAccess=false --query update.id --output text 2>"$error_file")"; then
+                break
+              fi
+              if grep -q 'ResourceInUseException' "$error_file"; then
+                sleep 10
+              else
+                cat "$error_file" >&2
+                exit 1
+              fi
+            done
+            [[ -n "$update_id" ]] || { echo "Timed out waiting to start EKS endpoint cleanup." >&2; exit 1; }
+            for attempt in {1..60}; do
+              status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+              [[ "$status" == "Successful" ]] && break
+              if [[ "$status" != "InProgress" ]]; then
+                aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2
+                exit 1
+              fi
+              sleep 10
+            done
+            fi
+            [[ "$status" == "Successful" ]] || { echo "Timed out waiting for EKS endpoint cleanup." >&2; exit 1; }
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster does not exist; no endpoint cleanup is needed."
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
       - name: Remove generated Terraform inputs
         if: always()
         run: rm -f terraform.auto.tfvars.json backend.hcl

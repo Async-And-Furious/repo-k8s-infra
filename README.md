@@ -4,9 +4,9 @@ Tech Challenge Fase 3 — VPC, EKS and ECR via Terraform.
 
 The EKS module also bootstraps the AWS Load Balancer Controller and Metrics
 Server with pinned Helm chart versions. In AWS Academy mode only Metrics
-Server is installed. The Kubernetes API is private by
-default; set `cluster_endpoint_public_access=true` only when required and
-provide a narrow `cluster_endpoint_public_access_cidrs` list.
+Server is installed. The Kubernetes API is private by default; set
+`cluster_endpoint_public_access=true` only when required and provide no more
+than 40 narrow entries in `cluster_endpoint_public_access_cidrs`.
 
 ## Scope
 
@@ -89,9 +89,10 @@ Pull requests and pushes to `main` or `develop` run format and validation checks
 `ubuntu-latest` without AWS credentials. Manual dispatch selects `hml` or `prod` and
 `plan` or `apply`. Normal mode uses the self-hosted runner labels `self-hosted`,
 `linux`, and `eks-private` so the private EKS endpoint and Helm provider are reachable.
-Academy mode uses `ubuntu-latest`; each Academy plan/apply fetches GitHub's `/meta`
-Actions CIDR allowlist and makes the EKS API endpoint public only for those CIDRs.
-The allowlist can change, so rerun plan/apply when a session is retried; no unrestricted
+Academy HML mode uses `ubuntu-latest`; each run validates the hosted runner's
+current public IPv4 address and temporarily restricts the EKS public endpoint
+to that single `/32`. The workflow preserves private endpoint access and always
+disables public endpoint access after Terraform and Helm finish. No unrestricted
 CIDR is used. Manual plan and apply operations run directly against the selected
 environment's S3 state. Production apply requires `confirm="APPLY PROD"`; state
 operations for the same environment do not run concurrently.
