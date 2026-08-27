@@ -2,4 +2,5 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.auto.tfvars.json
 !*.tfvars.example

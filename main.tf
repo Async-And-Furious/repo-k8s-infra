@@ -22,10 +22,12 @@ module "eks" {
   environment        = var.environment
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnet_ids
-  public_subnet_ids  = module.vpc.public_subnet_ids
 
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+  aws_academy                          = var.aws_academy
+  manage_iam                           = var.manage_iam
+  lab_role_arn                         = var.lab_role_arn
   eks_cluster_role_arn                 = var.eks_cluster_role_arn
   eks_node_role_arn                    = var.eks_node_role_arn
   load_balancer_controller_role_arn    = var.load_balancer_controller_role_arn
@@ -51,6 +53,8 @@ provider "helm" {
 }
 
 resource "helm_release" "aws_load_balancer_controller" {
+  count = var.aws_academy ? 0 : 1
+
   name             = "aws-load-balancer-controller"
   namespace        = "kube-system"
   create_namespace = false

@@ -3,6 +3,24 @@ variable "environment" {
   type        = string
 }
 
+variable "aws_academy" {
+  description = "Use the pre-existing LabRole and disable IAM/IRSA resources"
+  type        = bool
+  default     = false
+}
+
+variable "manage_iam" {
+  description = "Allow creation of IAM roles"
+  type        = bool
+  default     = true
+}
+
+variable "lab_role_arn" {
+  description = "Existing LabRole ARN for Academy mode"
+  type        = string
+  default     = ""
+}
+
 variable "vpc_id" {
   description = "VPC id from the vpc module"
   type        = string
@@ -10,11 +28,6 @@ variable "vpc_id" {
 
 variable "private_subnet_ids" {
   description = "Private subnet ids from the vpc module (nodes and internal load balancers)"
-  type        = list(string)
-}
-
-variable "public_subnet_ids" {
-  description = "Public subnet ids from the vpc module (internet-facing load balancers, if any)"
   type        = list(string)
 }
 

@@ -18,6 +18,28 @@ on:
         default: plan
         type: choice
         options: [plan, apply]
+      aws_academy:
+        description: Use AWS Academy LabRole compatibility mode
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      manage_iam:
+        description: Allow Terraform to create IAM and IRSA resources
+        required: true
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      lab_role_arn:
+        description: Existing LabRole ARN (required when Academy mode is true)
+        required: false
+        default: ""
+        type: string
+      confirm:
+        description: Type "APPLY PROD" to allow a production apply
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -27,11 +49,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_REGION: us-east-1
-  TF_WORKING_DIR: .
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
   TF_VAR_eks_cluster_role_arn: ${{ vars.EKS_CLUSTER_ROLE_ARN }}
   TF_VAR_eks_node_role_arn: ${{ vars.EKS_NODE_ROLE_ARN }}
   TF_VAR_load_balancer_controller_role_arn: ${{ vars.LOAD_BALANCER_CONTROLLER_ROLE_ARN }}
+  TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
 
 jobs:
   validate:
@@ -40,84 +62,90 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.13"
       - run: terraform fmt -check -recursive
       - run: terraform init -input=false -backend=false
       - run: terraform validate
 
-  plan:
-    name: Terraform Plan
+  terraform:
+    name: Terraform ${{ inputs.action }}
     needs: validate
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-      - name: Validate AWS credential mode
-        shell: bash
-        run: |
-          set -euo pipefail
-          credentials=0
-          [[ -n "$AWS_ACCESS_KEY_ID" ]] && ((credentials+=1))
-          [[ -n "$AWS_SECRET_ACCESS_KEY" ]] && ((credentials+=1))
-          [[ -n "$AWS_SESSION_TOKEN" ]] && ((credentials+=1))
-          if [[ "$credentials" != 0 && "$credentials" != 3 ]]; then
-            echo "Academy credentials must be provided together: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN." >&2
-            exit 1
-          fi
-      - name: Configure AWS credentials (Academy)
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Configure AWS credentials (OIDC)
-        if: env.AWS_ACCESS_KEY_ID == '' && env.AWS_SECRET_ACCESS_KEY == '' && env.AWS_SESSION_TOKEN == ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - run: terraform init -input=false -backend-config=environments/${{ inputs.environment }}/backend.hcl
-      - run: terraform plan -input=false -var=environment=${{ inputs.environment }} -out=tfplan
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tfplan-${{ inputs.environment }}
-          path: tfplan
-          retention-days: 1
-
-  apply:
-    name: Terraform Apply
-    needs: plan
-    if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}-apply
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+    # Academy runs on a hosted runner; normal mode needs the private-EKS runner.
+    runs-on: ${{ inputs.aws_academy == 'true' && 'ubuntu-latest' || fromJSON('["self-hosted","linux","eks-private"]') }}
     permissions:
       contents: read
       id-token: write
       actions: read
+    env:
+      ENVIRONMENT: ${{ inputs.environment }}
+      AWS_ACADEMY: ${{ inputs.aws_academy }}
+      MANAGE_IAM: ${{ inputs.manage_iam }}
+      LAB_ROLE_ARN: ${{ inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
     steps:
+      - name: Guard production apply
+        if: inputs.environment == 'prod' && inputs.action == 'apply'
+        run: |
+          [ "$CONFIRM" = "APPLY PROD" ] || { echo 'Production apply requires confirm="APPLY PROD".' >&2; exit 1; }
+        env:
+          CONFIRM: ${{ inputs.confirm }}
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.13"
+      - name: Prepare Terraform variables
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$AWS_ACADEMY" == "true" ]]; then
+            curl -fsSL -H 'Accept: application/vnd.github+json' https://api.github.com/meta |
+              jq -ce --arg environment "$ENVIRONMENT" \
+                --arg aws_region "$AWS_REGION" \
+                --argjson aws_academy "$AWS_ACADEMY" \
+                --argjson manage_iam "$MANAGE_IAM" \
+                --arg lab_role_arn "$LAB_ROLE_ARN" '{
+                  environment: $environment,
+                  aws_region: $aws_region,
+                  aws_academy: $aws_academy,
+                  manage_iam: $manage_iam,
+                  lab_role_arn: $lab_role_arn,
+                  cluster_endpoint_public_access: true,
+                  cluster_endpoint_public_access_cidrs: (.actions |
+                    if type == "array" and length > 0 and all(.[]; . != "0.0.0.0/0") then .
+                    else error("GitHub Actions CIDR response is empty or too broad") end)
+                }' > terraform.auto.tfvars.json
+          else
+            jq -n --arg environment "$ENVIRONMENT" \
+              --arg aws_region "$AWS_REGION" \
+              --argjson aws_academy "$AWS_ACADEMY" \
+              --argjson manage_iam "$MANAGE_IAM" \
+              --arg lab_role_arn "$LAB_ROLE_ARN" '{
+                environment: $environment,
+                aws_region: $aws_region,
+                aws_academy: $aws_academy,
+                manage_iam: $manage_iam,
+                lab_role_arn: $lab_role_arn
+              }' > terraform.auto.tfvars.json
+          fi
+      - name: Validate Terraform mode
+        if: inputs.aws_academy == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$MANAGE_IAM" == "false" ]] || { echo "AWS Academy mode requires manage_iam=false." >&2; exit 1; }
+          [[ -n "$LAB_ROLE_ARN" ]] || { echo "AWS Academy mode requires a non-empty lab_role_arn." >&2; exit 1; }
       - name: Validate AWS credential mode
         shell: bash
         run: |
           set -euo pipefail
           credentials=0
-          [[ -n "$AWS_ACCESS_KEY_ID" ]] && ((credentials+=1))
-          [[ -n "$AWS_SECRET_ACCESS_KEY" ]] && ((credentials+=1))
-          [[ -n "$AWS_SESSION_TOKEN" ]] && ((credentials+=1))
+          for value in "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN"; do
+            [[ -n "$value" ]] && credentials=$((credentials + 1))
+          done
           if [[ "$credentials" != 0 && "$credentials" != 3 ]]; then
             echo "Academy credentials must be provided together: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN." >&2
             exit 1
@@ -136,8 +164,16 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
-      - run: terraform init -input=false -backend-config=environments/${{ inputs.environment }}/backend.hcl
-      - uses: actions/download-artifact@v4
-        with:
-          name: tfplan-${{ inputs.environment }}
-      - run: terraform apply -input=false -auto-approve tfplan
+      - name: Bootstrap Terraform state backend
+        shell: bash
+        run: bash .github/scripts/bootstrap-backend.sh repo-k8s-infra "$ENVIRONMENT"
+      - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Terraform plan
+        if: inputs.action == 'plan'
+        run: terraform plan -input=false
+      - name: Terraform apply
+        if: inputs.action == 'apply'
+        run: terraform apply -input=false -auto-approve
+      - name: Remove generated Terraform inputs
+        if: always()
+        run: rm -f terraform.auto.tfvars.json backend.hcl
