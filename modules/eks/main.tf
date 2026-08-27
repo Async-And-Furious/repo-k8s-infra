@@ -34,6 +34,7 @@ module "eks" {
   # Keep the Academy path from querying iam:GetRole for the assumed voclabs session.
   enable_cluster_creator_admin_permissions = var.aws_academy ? false : null
   access_entries                           = local.academy_access_entries
+  kms_key_administrators                   = var.aws_academy ? [var.lab_role_arn] : []
 
   cluster_name    = "tc3-eks-${var.environment}"
   cluster_version = var.cluster_version
