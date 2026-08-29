@@ -36,7 +36,8 @@ module "eks" {
 module "ecr" {
   source = "./modules/ecr"
 
-  environment = var.environment
+  environment  = var.environment
+  force_delete = var.aws_academy && var.environment == "hml"
 }
 
 provider "helm" {
