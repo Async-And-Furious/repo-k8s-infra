@@ -17,7 +17,7 @@ on:
         required: true
         default: plan
         type: choice
-        options: [plan, apply]
+        options: [plan, apply, destroy-plan, destroy]
       aws_academy:
         description: Use AWS Academy LabRole compatibility mode
         required: true
@@ -36,7 +36,7 @@ on:
         default: ""
         type: string
       confirm:
-        description: Type "APPLY PROD" to allow a production apply
+        description: Type "APPLY PROD" for production apply or "DESTROY HML" for destroy
         required: false
         default: ""
         type: string
@@ -93,6 +93,20 @@ jobs:
         run: |
           [ "$CONFIRM" = "APPLY PROD" ] || { echo 'Production apply requires confirm="APPLY PROD".' >&2; exit 1; }
         env:
+          CONFIRM: ${{ inputs.confirm }}
+      - name: Guard HML destroy
+        if: inputs.action == 'destroy-plan' || inputs.action == 'destroy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ENVIRONMENT" == "hml" ]] || { echo "Destroy operations are restricted to HML." >&2; exit 1; }
+          [[ "$AWS_ACADEMY" == "true" ]] || { echo "Destroy operations require AWS Academy mode." >&2; exit 1; }
+          if [[ "$ACTION" == "destroy" && "$CONFIRM" != "DESTROY HML" ]]; then
+            echo 'Destroy requires confirm="DESTROY HML".' >&2
+            exit 1
+          fi
+        env:
+          ACTION: ${{ inputs.action }}
           CONFIRM: ${{ inputs.confirm }}
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -180,8 +194,27 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Inspect destroy state backend
+        if: inputs.action == 'destroy-plan' || inputs.action == 'destroy'
+        shell: bash
+        run: bash .github/scripts/inspect-backend.sh repo-k8s-infra "$ENVIRONMENT"
+      - name: Initialize Terraform for destroy
+        if: env.DESTROY_STATE_OBJECT == 'true'
+        run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Check destroy state contents
+        if: (inputs.action == 'destroy-plan' || inputs.action == 'destroy') && env.DESTROY_STATE_OBJECT == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          state_list="$(terraform state list)"
+          if [[ -n "$state_list" ]]; then
+            echo "DESTROY_HAS_STATE=true" >> "$GITHUB_ENV"
+          else
+            echo "DESTROY_HAS_STATE=false" >> "$GITHUB_ENV"
+            echo "Terraform state contains no resources; destroy is a no-op."
+          fi
       - name: Allow Academy HML runner to reach existing EKS cluster
-        if: inputs.aws_academy == 'true' && inputs.environment == 'hml'
+        if: inputs.aws_academy == 'true' && inputs.environment == 'hml' && ((inputs.action == 'plan' || inputs.action == 'apply') || env.DESTROY_HAS_STATE == 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -221,23 +254,34 @@ jobs:
             fi
             [[ "$status" == "Successful" ]] || { echo "Timed out waiting for EKS endpoint update." >&2; exit 1; }
           elif grep -q 'ResourceNotFoundException' "$error_file"; then
-            echo "EKS cluster does not exist yet; Terraform will create it."
+            echo "EKS cluster does not exist; continuing."
           else
             cat "$error_file" >&2
             exit 1
           fi
       - name: Bootstrap Terraform state backend
+        if: inputs.action == 'plan' || inputs.action == 'apply'
         shell: bash
         run: bash .github/scripts/bootstrap-backend.sh repo-k8s-infra "$ENVIRONMENT"
-      - run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Initialize Terraform
+        if: inputs.action == 'plan' || inputs.action == 'apply'
+        run: terraform init -reconfigure -input=false -backend-config=backend.hcl
       - name: Terraform plan
         if: inputs.action == 'plan'
         run: terraform plan -input=false
       - name: Terraform apply
         if: inputs.action == 'apply'
         run: terraform apply -input=false -auto-approve
+      - name: Terraform destroy plan
+        if: inputs.action == 'destroy-plan' && env.DESTROY_HAS_STATE == 'true'
+        run: terraform plan -destroy -input=false
+      - name: Terraform destroy
+        if: inputs.action == 'destroy' && env.DESTROY_HAS_STATE == 'true'
+        run: |
+          terraform plan -destroy -input=false -out=destroy.tfplan
+          terraform apply -input=false destroy.tfplan
       - name: Disable Academy HML public EKS endpoint
-        if: always() && inputs.aws_academy == 'true' && inputs.environment == 'hml'
+        if: always() && inputs.aws_academy == 'true' && inputs.environment == 'hml' && ((inputs.action == 'plan' || inputs.action == 'apply') || env.DESTROY_HAS_STATE == 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -281,6 +325,23 @@ jobs:
             cat "$error_file" >&2
             exit 1
           fi
+      - name: Summarize destroy
+        if: always() && (inputs.action == 'destroy-plan' || inputs.action == 'destroy')
+        shell: bash
+        run: |
+          if [[ "$DESTROY_HAS_STATE" == "true" ]]; then
+            echo "### HML ${ACTION} used the existing Terraform state (${JOB_STATUS})" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$DESTROY_STATE_OBJECT" == "false" || "$DESTROY_HAS_STATE" == "false" ]]; then
+            echo "### HML ${ACTION}: no resources in Terraform state; no-op" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### HML ${ACTION} did not reach state evaluation (${JOB_STATUS})" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "The workflow does not delete the S3 bucket or Terraform state object." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          ACTION: ${{ inputs.action }}
+          DESTROY_HAS_STATE: ${{ env.DESTROY_HAS_STATE }}
+          DESTROY_STATE_OBJECT: ${{ env.DESTROY_STATE_OBJECT }}
+          JOB_STATUS: ${{ job.status }}
       - name: Remove generated Terraform inputs
         if: always()
-        run: rm -f terraform.auto.tfvars.json backend.hcl
+        run: rm -f terraform.auto.tfvars.json backend.hcl destroy.tfplan

@@ -87,7 +87,7 @@ gh variable set LOAD_BALANCER_CONTROLLER_ROLE_ARN --body "arn:aws:iam::<ACCOUNT_
 
 Pull requests and pushes to `main` or `develop` run format and validation checks only on
 `ubuntu-latest` without AWS credentials. Manual dispatch selects `hml` or `prod` and
-`plan` or `apply`. Normal mode uses the self-hosted runner labels `self-hosted`,
+`plan`, `apply`, `destroy-plan`, or `destroy`. Normal mode uses the self-hosted runner labels `self-hosted`,
 `linux`, and `eks-private` so the private EKS endpoint and Helm provider are reachable.
 Academy HML mode uses `ubuntu-latest`; each run validates the hosted runner's
 current public IPv4 address and temporarily restricts the EKS public endpoint
@@ -96,6 +96,15 @@ disables public endpoint access after Terraform and Helm finish. No unrestricted
 CIDR is used. Manual plan and apply operations run directly against the selected
 environment's S3 state. Production apply requires `confirm="APPLY PROD"`; state
 operations for the same environment do not run concurrently.
+
+Destroy operations are available only for Academy HML runs. Both destroy
+actions inspect the account-qualified S3 state object without creating or
+configuring the bucket; a missing object or state with no resources is a
+successful no-op. `destroy-plan` runs a destroy plan only. `destroy` requires
+the exact confirmation `DESTROY HML`, creates a saved destroy plan, and applies
+that exact plan. Neither action removes the state bucket or state object.
+Academy HML permits Terraform to delete the ECR repository with its images;
+the production and default ECR behavior continues to reject nonempty deletion.
 
 Manual dispatch exposes `aws_academy`, `manage_iam`, and `lab_role_arn`. Select
 `aws_academy=true`, `manage_iam=false`, and paste the current LabRole ARN into
