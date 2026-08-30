@@ -85,17 +85,26 @@ gh variable set LOAD_BALANCER_CONTROLLER_ROLE_ARN --body "arn:aws:iam::<ACCOUNT_
 
 ## GitHub Actions
 
-Pull requests and pushes to `main` or `develop` run format and validation checks only on
-`ubuntu-latest` without AWS credentials. Manual dispatch selects `hml` or `prod` and
-`plan`, `apply`, `destroy-plan`, or `destroy`. Normal mode uses the self-hosted runner labels `self-hosted`,
+Pull requests and pushes to `main` run format and validation checks only on
+`ubuntu-latest` without AWS credentials. A push to the integration branch
+`develop` automatically applies HML (using repository variables for its mode).
+Manual dispatch selects `hml` or `prod` and `plan`, `apply`, `destroy-plan`, or
+`destroy`. Normal mode uses the self-hosted runner labels `self-hosted`,
 `linux`, and `eks-private` so the private EKS endpoint and Helm provider are reachable.
 Academy HML mode uses `ubuntu-latest`; each run validates the hosted runner's
 current public IPv4 address and temporarily restricts the EKS public endpoint
 to that single `/32`. The workflow preserves private endpoint access and always
 disables public endpoint access after Terraform and Helm finish. No unrestricted
 CIDR is used. Manual plan and apply operations run directly against the selected
-environment's S3 state. Production apply requires `confirm="APPLY PROD"`; state
+environment's S3 state. Production runs use the protected GitHub Environment
+`production`; its approval rules gate the job. Production apply also requires
+`confirm="APPLY PROD"`, and AWS Academy mode is rejected for production. State
 operations for the same environment do not run concurrently.
+
+Before backend bootstrap or an EKS endpoint change, the workflow performs a
+read-only STS credential check and account-qualified state lookup. It fails
+clearly when credentials are missing, expired, or unauthorized. Plans are
+saved as `tfplan` and uploaded as a run artifact; apply uses that saved plan.
 
 Destroy operations are available only for Academy HML runs. Both destroy
 actions inspect the account-qualified S3 state object without creating or

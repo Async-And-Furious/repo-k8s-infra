@@ -1,5 +1,14 @@
 # Agent log
 
+## 2026-08-29 (Release path hardening)
+
+- Added automatic HML apply on `develop`, protected `production` environment
+  gating, saved Terraform plan artifacts, and read-only AWS/state preflight.
+- Academy mode remains LabRole-compatible for HML and is explicitly rejected
+  for production; no apply or destroy was performed.
+- Published stable ECR repository name output and clarified the existing
+  VPC/EKS/OIDC/ECR output contract.
+
 ## 2026-08-26 (Direct apply workflow)
 
 - Terraform apply now runs directly after validation; the plan job remains
