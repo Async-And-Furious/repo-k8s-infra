@@ -41,8 +41,10 @@ resources could be implemented for real.
 
 ## Consequences
 
-- `repo-k8s-infra` must provision an internal ALB (via AWS Load Balancer
-  Controller / Ingress) and output its DNS name/ARN.
+- `repo-k8s-infra` provisions the internal ALB, HTTP listener, and empty IP
+  target group and outputs their DNS name/ARN. The application deployment
+  registers pod IPs in that target group; this keeps ALB ownership in
+  infrastructure without requiring the controller during AWS Academy runs.
 - `repo-auth-serverless` must provision the HTTP API, routes, VPC Link, and
   Lambda Authorizer, consuming the ALB output from `repo-k8s-infra`.
 - Future microservice split: add Kubernetes Ingress rules + Gateway routes

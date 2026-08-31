@@ -40,6 +40,14 @@ module "ecr" {
   force_delete = var.aws_academy && var.environment == "hml"
 }
 
+module "internal_alb" {
+  source = "./modules/alb"
+
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+}
+
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
@@ -54,14 +62,14 @@ provider "helm" {
 }
 
 resource "helm_release" "aws_load_balancer_controller" {
-  count = var.aws_academy ? 0 : 1
-
   name             = "aws-load-balancer-controller"
   namespace        = "kube-system"
   create_namespace = false
   repository       = "https://aws.github.io/eks-charts"
   chart            = "aws-load-balancer-controller"
   version          = "1.8.2"
+  # The chart owns the TargetGroupBinding CRD; keep it installed in both environments.
+  skip_crds = false
 
   set {
     name  = "clusterName"
@@ -78,9 +86,13 @@ resource "helm_release" "aws_load_balancer_controller" {
     value = "aws-load-balancer-controller"
   }
 
-  set {
-    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = module.eks.load_balancer_controller_role_arn
+  dynamic "set" {
+    for_each = var.aws_academy ? [] : [module.eks.load_balancer_controller_role_arn]
+
+    content {
+      name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+      value = set.value
+    }
   }
 }
 

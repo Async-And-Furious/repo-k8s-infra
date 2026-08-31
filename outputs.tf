@@ -52,3 +52,37 @@ output "ecr_repository_name" {
   description = "Stable ECR repository name consumed by deployment repositories"
   value       = module.ecr.repository_name
 }
+
+output "internal_alb_arn" {
+  description = "Internal ALB ARN consumed by the API Gateway integration contract"
+  value       = module.internal_alb.arn
+}
+
+output "internal_alb_dns_name" {
+  description = "Internal ALB DNS name for private operational checks"
+  value       = module.internal_alb.dns_name
+}
+
+output "internal_alb_listener_arn" {
+  description = "HTTP listener ARN used as the API Gateway HTTP_PROXY integration URI"
+  value       = module.internal_alb.listener_arn
+}
+
+output "internal_alb_security_group_id" {
+  description = "Security group used by the internal ALB and API Gateway VPC Link contract"
+  value       = module.internal_alb.security_group_id
+}
+
+output "application_target_group_arn" {
+  description = "Target group where the application deployment registers pod IPs"
+  value       = module.internal_alb.target_group_arn
+}
+
+output "internal_alb_target_group_arn" {
+  description = "TargetGroupBinding targetGroupARN for the application Service"
+  value       = module.internal_alb.target_group_arn
+}
+
+output "application_backend_port" {
+  value = module.internal_alb.backend_port
+}

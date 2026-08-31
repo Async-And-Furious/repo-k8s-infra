@@ -1,5 +1,26 @@
 # Agent log
 
+## 2026-08-30 (TargetGroupBinding integration)
+
+- Kept the AWS Load Balancer Controller enabled for HML and production and
+  explicitly retained Helm CRD installation so TargetGroupBinding is available.
+- Academy mode uses the existing node LabRole rather than an IRSA annotation;
+  normal mode continues to use the configured/controller IRSA role.
+- Added an explicit internal target-group output and documented the exact
+  TargetGroupBinding, Service, port, and listener contract.
+- No AWS apply or destroy was performed.
+
+## 2026-08-30 (confirmed delivery target)
+
+- Allowed the same temporary AWS Academy credential set for HML and production;
+  production applies remain behind the protected `production` Environment and
+  explicit confirmation.
+- Added an environment-scoped internal ALB, listener, IP target group, and
+  outputs for the Auth/API Gateway and application contracts.
+- Made Academy endpoint exposure temporary for existing and new clusters and
+  restore the captured private/public/CIDR settings after every plan/apply path.
+- No AWS apply or destroy was performed.
+
 ## 2026-08-29 (Release path hardening)
 
 - Added automatic HML apply on `develop`, protected `production` environment

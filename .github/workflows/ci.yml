@@ -18,18 +18,6 @@ on:
         default: plan
         type: choice
         options: [plan, apply, destroy-plan, destroy]
-      aws_academy:
-        description: Use AWS Academy LabRole compatibility mode
-        required: true
-        default: "false"
-        type: choice
-        options: ["false", "true"]
-      manage_iam:
-        description: Allow Terraform to create IAM and IRSA resources
-        required: true
-        default: "true"
-        type: choice
-        options: ["true", "false"]
       lab_role_arn:
         description: Existing LabRole ARN (required when Academy mode is true)
         required: false
@@ -73,17 +61,15 @@ jobs:
     needs: validate
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
     environment: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || inputs.environment == 'hml' && 'hml' || 'production' }}
-    # Academy runs on a hosted runner; normal mode needs the private-EKS runner.
-    runs-on: ${{ (github.event_name == 'push' && vars.AWS_ACADEMY == 'true' || inputs.aws_academy == 'true') && 'ubuntu-latest' || fromJSON('["self-hosted","linux","eks-private"]') }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
       actions: read
     env:
       ENVIRONMENT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'prod' || inputs.environment }}
       ACTION: ${{ github.event_name == 'push' && 'apply' || inputs.action }}
-      AWS_ACADEMY: ${{ github.event_name == 'push' && (vars.AWS_ACADEMY || 'false') || inputs.aws_academy }}
-      MANAGE_IAM: ${{ github.event_name == 'push' && (vars.MANAGE_IAM || 'true') || inputs.manage_iam }}
+      AWS_ACADEMY: "true"
+      MANAGE_IAM: "false"
       LAB_ROLE_ARN: ${{ github.event_name == 'push' && vars.LAB_ROLE_ARN || (inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN) }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -100,11 +86,6 @@ jobs:
           [ "$CONFIRM" = "APPLY PROD" ] || { echo 'Production apply requires confirm="APPLY PROD".' >&2; exit 1; }
         env:
           CONFIRM: ${{ inputs.confirm }}
-      - name: Reject Academy production
-        if: env.ENVIRONMENT == 'prod' && env.AWS_ACADEMY == 'true'
-        run: |
-          echo "AWS Academy credentials are not valid for production; use the protected production environment with real-account OIDC credentials." >&2
-          exit 1
       - name: Guard HML destroy
         if: env.ACTION == 'destroy-plan' || env.ACTION == 'destroy'
         shell: bash
@@ -179,7 +160,7 @@ jobs:
           set -euo pipefail
           [[ "$MANAGE_IAM" == "false" ]] || { echo "AWS Academy mode requires manage_iam=false." >&2; exit 1; }
           [[ -n "$LAB_ROLE_ARN" ]] || { echo "AWS Academy mode requires a non-empty lab_role_arn." >&2; exit 1; }
-      - name: Validate AWS credential mode
+      - name: Validate AWS Academy credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -187,18 +168,7 @@ jobs:
           for value in "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN"; do
             [[ -n "$value" ]] && credentials=$((credentials + 1))
           done
-          if [[ "$credentials" != 0 && "$credentials" != 3 ]]; then
-            echo "Academy credentials must be provided together: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN." >&2
-            exit 1
-          fi
-          if [[ "$AWS_ACADEMY" == "true" && "$credentials" != 3 ]]; then
-            echo "AWS Academy mode requires all three temporary credential secrets." >&2
-            exit 1
-          fi
-          if [[ "$AWS_ACADEMY" != "true" && "$credentials" == 3 ]]; then
-            echo "Complete AWS Academy temporary credentials require AWS Academy mode." >&2
-            exit 1
-          fi
+          [[ "$credentials" == 3 ]] || { echo "Both HML and production require all three temporary AWS Academy credentials." >&2; exit 1; }
       - name: Configure AWS credentials (Academy)
         if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
@@ -206,12 +176,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Configure AWS credentials (OIDC)
-        if: env.AWS_ACCESS_KEY_ID == '' && env.AWS_SECRET_ACCESS_KEY == '' && env.AWS_SESSION_TOKEN == ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Preflight AWS credentials and Terraform state
         shell: bash
@@ -336,9 +300,14 @@ jobs:
               status="Successful"
               echo "EKS endpoint already matches its original settings."
             else
+            config_file="$(mktemp)"
+            trap 'rm -f "$config_file"' EXIT
+            private_json="$( [[ "$private_access" == "True" ]] && echo true || echo false )"
+            public_json="$( [[ "$public_access" == "True" ]] && echo true || echo false )"
+            jq -n --argjson private "$private_json" --argjson public "$public_json" --arg cidrs "$public_cidrs" '{endpointPrivateAccess: $private, endpointPublicAccess: $public, publicAccessCidrs: (if $cidrs == "" then [] else ($cidrs | split(",")) end)}' > "$config_file"
             update_id=""
             for attempt in {1..60}; do
-              if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "endpointPrivateAccess=$private_access,endpointPublicAccess=$public_access,publicAccessCidrs=$public_cidrs" --query update.id --output text 2>"$error_file")"; then
+              if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>"$error_file")"; then
                 break
               fi
               if grep -q 'ResourceInUseException' "$error_file"; then
@@ -390,19 +359,17 @@ jobs:
   apply:
     name: Terraform apply
     needs: plan
-    if: needs.plan.result == 'success' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.action == 'apply'))
+    if: needs.plan.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || (github.event_name == 'workflow_dispatch' && inputs.action == 'apply'))
     environment: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || inputs.environment == 'hml' && 'hml' || 'production' }}
-    # Academy runs on a hosted runner; normal mode needs the private-EKS runner.
-    runs-on: ${{ (github.event_name == 'push' && vars.AWS_ACADEMY == 'true' || inputs.aws_academy == 'true') && 'ubuntu-latest' || fromJSON('["self-hosted","linux","eks-private"]') }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
       actions: read
     env:
       ENVIRONMENT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'prod' || inputs.environment }}
       ACTION: apply
-      AWS_ACADEMY: ${{ github.event_name == 'push' && (vars.AWS_ACADEMY || 'false') || inputs.aws_academy }}
-      MANAGE_IAM: ${{ github.event_name == 'push' && (vars.MANAGE_IAM || 'true') || inputs.manage_iam }}
+      AWS_ACADEMY: "true"
+      MANAGE_IAM: "false"
       LAB_ROLE_ARN: ${{ github.event_name == 'push' && vars.LAB_ROLE_ARN || (inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN) }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -417,16 +384,11 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && env.ENVIRONMENT == 'prod'
         run: |
           [ "${{ inputs.confirm }}" = "APPLY PROD" ] || { echo 'Production apply requires confirm="APPLY PROD".' >&2; exit 1; }
-      - name: Reject Academy production
-        if: env.ENVIRONMENT == 'prod' && env.AWS_ACADEMY == 'true'
-        run: |
-          echo "AWS Academy credentials are not valid for production; use the protected production environment with real-account OIDC credentials." >&2
-          exit 1
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.13"
-      - name: Validate AWS credential mode
+      - name: Validate AWS Academy credentials
         shell: bash
         run: |
           set -euo pipefail
@@ -434,31 +396,13 @@ jobs:
           for value in "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN"; do
             [[ -n "$value" ]] && credentials=$((credentials + 1))
           done
-          if [[ "$credentials" != 0 && "$credentials" != 3 ]]; then
-            echo "Academy credentials must be provided together: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN." >&2
-            exit 1
-          fi
-          if [[ "$AWS_ACADEMY" == "true" && "$credentials" != 3 ]]; then
-            echo "AWS Academy mode requires all three temporary credential secrets." >&2
-            exit 1
-          fi
-          if [[ "$AWS_ACADEMY" != "true" && "$credentials" == 3 ]]; then
-            echo "Complete AWS Academy temporary credentials require AWS Academy mode." >&2
-            exit 1
-          fi
-      - name: Configure AWS credentials (Academy)
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
+          [[ "$credentials" == 3 ]] || { echo "Both HML and production require all three temporary AWS Academy credentials." >&2; exit 1; }
+      - name: Configure AWS Academy credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Configure AWS credentials (OIDC)
-        if: env.AWS_ACCESS_KEY_ID == '' && env.AWS_SECRET_ACCESS_KEY == '' && env.AWS_SESSION_TOKEN == ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Discover Academy HML runner address
         if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
@@ -485,9 +429,32 @@ jobs:
             private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
             public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
             public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
-            printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nHML_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
-            aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "endpointPrivateAccess=true,endpointPublicAccess=true,publicAccessCidrs=$RUNNER_CIDR" >/dev/null
-            until [[ "$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.status --output text)" == "ACTIVE" ]]; do sleep 10; done
+          else
+            # A new cluster is created by the saved plan. Its intended baseline is
+            # private-only; expose it only for this apply and restore that baseline.
+            private_access="True"
+            public_access="False"
+            public_cidrs=""
+          fi
+          printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nHML_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
+          if [[ "$public_access" != "True" || "$public_cidrs" != "$RUNNER_CIDR" ]]; then
+            config_file="$(mktemp)"
+            trap 'rm -f "$config_file"' EXIT
+            jq -n --arg cidr "$RUNNER_CIDR" '{endpointPrivateAccess: true, endpointPublicAccess: true, publicAccessCidrs: [$cidr]}' > "$config_file"
+            update_id=""
+            for attempt in {1..60}; do
+              if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>/tmp/eks-update-error)"; then break; fi
+              grep -q 'ResourceInUseException' /tmp/eks-update-error || { cat /tmp/eks-update-error >&2; exit 1; }
+              sleep 10
+            done
+            [[ -n "$update_id" ]] || { echo "Timed out waiting for EKS endpoint update." >&2; exit 1; }
+            for attempt in {1..60}; do
+              status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+              [[ "$status" == "Successful" ]] && break
+              [[ "$status" == "InProgress" ]] || { aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2; exit 1; }
+              sleep 10
+            done
+            [[ "$status" == "Successful" ]] || { echo "Timed out waiting for EKS endpoint update." >&2; exit 1; }
           fi
       - name: Bootstrap Terraform state backend
         shell: bash
@@ -507,8 +474,25 @@ jobs:
           set -euo pipefail
           [[ -n "$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && -n "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" ]] || { echo "Original EKS endpoint settings were not captured; refusing cleanup." >&2; exit 1; }
           if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>&1; then
-            aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "endpointPrivateAccess=$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS,endpointPublicAccess=$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS,publicAccessCidrs=$HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" >/dev/null
-            until [[ "$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.status --output text)" == "ACTIVE" ]]; do sleep 10; done
+            config_file="$(mktemp)"
+            trap 'rm -f "$config_file"' EXIT
+            private_json="$( [[ "$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" == "True" ]] && echo true || echo false )"
+            public_json="$( [[ "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" == "True" ]] && echo true || echo false )"
+            jq -n --argjson private "$private_json" --argjson public "$public_json" --arg cidrs "$HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" '{endpointPrivateAccess: $private, endpointPublicAccess: $public, publicAccessCidrs: (if $cidrs == "" then [] else ($cidrs | split(",")) end)}' > "$config_file"
+            update_id=""
+            for attempt in {1..60}; do
+              if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>/tmp/eks-restore-error)"; then break; fi
+              grep -q 'ResourceInUseException' /tmp/eks-restore-error || { cat /tmp/eks-restore-error >&2; exit 1; }
+              sleep 10
+            done
+            [[ -n "$update_id" ]] || { echo "Timed out waiting to restore EKS endpoint settings." >&2; exit 1; }
+            for attempt in {1..60}; do
+              status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+              [[ "$status" == "Successful" ]] && break
+              [[ "$status" == "InProgress" ]] || { aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2; exit 1; }
+              sleep 10
+            done
+            [[ "$status" == "Successful" ]] || { echo "Timed out waiting to restore EKS endpoint settings." >&2; exit 1; }
           fi
       - name: Remove generated Terraform inputs
         if: always()
