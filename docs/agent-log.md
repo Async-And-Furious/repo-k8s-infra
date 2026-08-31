@@ -1,5 +1,14 @@
 # Agent log
 
+## 2026-08-31 (Trivy findings)
+
+- Restricted the internal ALB egress to the VPC CIDR, enabled invalid-header
+  dropping, and enabled EKS controller manager and scheduler control-plane logs.
+- Kept the approved private HTTP VPC Link listener and documented its narrowly
+  scoped AWS-0054 exception; ECR remains on AWS-managed encryption because a
+  customer KMS design is not supported by the Academy contract.
+- No Terraform apply, commit, or push was performed.
+
 ## 2026-08-30 (TargetGroupBinding integration)
 
 - Kept the AWS Load Balancer Controller enabled for HML and production and
