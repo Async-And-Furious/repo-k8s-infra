@@ -49,3 +49,10 @@ resources could be implemented for real.
   Lambda Authorizer, consuming the ALB output from `repo-k8s-infra`.
 - Future microservice split: add Kubernetes Ingress rules + Gateway routes
   incrementally, no re-architecture of this integration.
+
+## Security exception
+
+The private ALB intentionally retains its HTTP listener because it is the
+approved target of the API Gateway VPC Link. AWS-0054 is ignored only for that
+listener; this repository has no ACM certificate or domain contract to support
+an HTTPS listener without changing the integration.

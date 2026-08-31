@@ -36,8 +36,9 @@ module "eks" {
   access_entries                           = local.academy_access_entries
   kms_key_administrators                   = var.aws_academy ? [var.lab_role_arn] : []
 
-  cluster_name    = "tc3-eks-${var.environment}"
-  cluster_version = var.cluster_version
+  cluster_name              = "tc3-eks-${var.environment}"
+  cluster_version           = var.cluster_version
+  cluster_enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_private_access      = true

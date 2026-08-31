@@ -16,19 +16,21 @@ resource "aws_security_group" "internal_alb" {
   }
 
   egress {
+    description = "Allow ALB responses only within the VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.this.cidr_block]
   }
 }
 
 resource "aws_lb" "internal" {
-  name               = "tc3-${var.environment}-internal"
-  internal           = true
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.internal_alb.id]
-  subnets            = var.private_subnet_ids
+  name                       = "tc3-${var.environment}-internal"
+  internal                   = true
+  load_balancer_type         = "application"
+  drop_invalid_header_fields = true
+  security_groups            = [aws_security_group.internal_alb.id]
+  subnets                    = var.private_subnet_ids
 }
 
 resource "aws_lb_target_group" "application" {
@@ -44,6 +46,7 @@ resource "aws_lb_target_group" "application" {
 }
 
 resource "aws_lb_listener" "http" {
+  #trivy:ignore:AWS-0054: Internal ALB HTTP is the approved API Gateway VPC Link target; this repo has no ACM certificate or domain contract.
   load_balancer_arn = aws_lb.internal.arn
   port              = 80
   protocol          = "HTTP"
