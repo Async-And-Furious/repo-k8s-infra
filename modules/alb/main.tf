@@ -45,8 +45,8 @@ resource "aws_lb_target_group" "application" {
   }
 }
 
+#trivy:ignore:AWS-0054: Internal ALB HTTP is the approved API Gateway VPC Link target; this repo has no ACM certificate or domain contract.
 resource "aws_lb_listener" "http" {
-  #trivy:ignore:AWS-0054: Internal ALB HTTP is the approved API Gateway VPC Link target; this repo has no ACM certificate or domain contract.
   load_balancer_arn = aws_lb.internal.arn
   port              = 80
   protocol          = "HTTP"
