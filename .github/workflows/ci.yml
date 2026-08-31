@@ -425,16 +425,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>&1; then
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
             private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
             public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
             public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster does not exist yet; Terraform will create it with runner-only public access."
+            printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=\nHML_ENDPOINT_EXPOSED=false\n' >> "$GITHUB_ENV"
+            exit 0
           else
-            # A new cluster is created by the saved plan. Its intended baseline is
-            # private-only; expose it only for this apply and restore that baseline.
-            private_access="True"
-            public_access="False"
-            public_cidrs=""
+            cat "$error_file" >&2
+            exit 1
           fi
           printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nHML_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
           if [[ "$public_access" != "True" || "$public_cidrs" != "$RUNNER_CIDR" ]]; then
@@ -473,9 +476,11 @@ jobs:
         run: |
           set -euo pipefail
           [[ -n "$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && -n "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" ]] || { echo "Original EKS endpoint settings were not captured; refusing cleanup." >&2; exit 1; }
-          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>&1; then
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
             config_file="$(mktemp)"
-            trap 'rm -f "$config_file"' EXIT
+            trap 'rm -f "$config_file" "$error_file"' EXIT
             private_json="$( [[ "$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" == "True" ]] && echo true || echo false )"
             public_json="$( [[ "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" == "True" ]] && echo true || echo false )"
             jq -n --argjson private "$private_json" --argjson public "$public_json" --arg cidrs "$HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" '{endpointPrivateAccess: $private, endpointPublicAccess: $public, publicAccessCidrs: (if $cidrs == "" then [] else ($cidrs | split(",")) end)}' > "$config_file"
@@ -493,6 +498,11 @@ jobs:
               sleep 10
             done
             [[ "$status" == "Successful" ]] || { echo "Timed out waiting to restore EKS endpoint settings." >&2; exit 1; }
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster no longer exists; no endpoint restore is needed."
+          else
+            cat "$error_file" >&2
+            exit 1
           fi
       - name: Remove generated Terraform inputs
         if: always()
