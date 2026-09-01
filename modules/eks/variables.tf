@@ -97,13 +97,19 @@ variable "load_balancer_controller_role_arn" {
 variable "cluster_version" {
   description = "Kubernetes version"
   type        = string
-  default     = "1.30"
+  # Matches the live tc3-eks-hml cluster. EKS permits no downgrade, so a lower
+  # value here makes every apply fail on UpdateClusterVersion rather than drift.
+  default = "1.31"
 }
 
 variable "node_instance_types" {
   description = "EC2 instance types for the managed node group"
   type        = list(string)
-  default     = ["t3.medium"]
+  # Free Tier accounts refuse to launch anything outside the free-tier-eligible
+  # set, which rules out t3.medium. c7i-flex.large is the only eligible type that
+  # is both x86_64 (the app images are not built for ARM) and large enough to
+  # hold more than a handful of pods.
+  default = ["c7i-flex.large"]
 }
 
 variable "node_desired_size" {

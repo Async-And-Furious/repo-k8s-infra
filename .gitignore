@@ -5,3 +5,6 @@
 *.auto.tfvars.json
 !*.tfvars.example
 .claude/
+
+# Generated per-environment by .github/scripts/bootstrap-backend.sh
+backend.hcl

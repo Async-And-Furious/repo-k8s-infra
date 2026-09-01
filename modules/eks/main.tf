@@ -32,7 +32,10 @@ module "eks" {
   source = "../../vendor/eks"
 
   # Keep the Academy path from querying iam:GetRole for the assumed voclabs session.
-  enable_cluster_creator_admin_permissions = var.aws_academy ? false : null
+  # Outside Academy the creating identity must be granted admin, or nobody can
+  # reach the cluster. Passing null here overrode the module default rather than
+  # deferring to it, and the module rejects null in an 'if' clause.
+  enable_cluster_creator_admin_permissions = !var.aws_academy
   access_entries                           = local.academy_access_entries
   kms_key_administrators                   = var.aws_academy ? [var.lab_role_arn] : []
 

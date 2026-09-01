@@ -183,7 +183,12 @@ resource "aws_eks_cluster" "this" {
 
   lifecycle {
     ignore_changes = [
-      access_config[0].bootstrap_cluster_creator_admin_permissions
+      access_config[0].bootstrap_cluster_creator_admin_permissions,
+      # DescribeCluster never returns bootstrapSelfManagedAddons, so an imported
+      # cluster reads back as false while the unset variable resolves to true,
+      # and Terraform proposes replacing a healthy cluster. Refresh cannot settle
+      # a field AWS will not report, so the diff is permanent until ignored.
+      bootstrap_self_managed_addons
     ]
   }
 }
