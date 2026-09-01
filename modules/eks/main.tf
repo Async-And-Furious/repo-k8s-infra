@@ -32,7 +32,7 @@ module "eks" {
   source = "../../vendor/eks"
 
   # Keep the Academy path from querying iam:GetRole for the assumed voclabs session.
-  enable_cluster_creator_admin_permissions = var.aws_academy ? false : null
+  enable_cluster_creator_admin_permissions = var.aws_academy ? false : true
   access_entries                           = local.academy_access_entries
   kms_key_administrators                   = var.aws_academy ? [var.lab_role_arn] : []
 
