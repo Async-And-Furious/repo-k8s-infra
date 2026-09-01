@@ -73,7 +73,7 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'prod' || inputs.environment }}
       ACTION: ${{ github.event_name == 'push' && 'apply' || inputs.action }}
-      AWS_ACADEMY: ${{ github.event_name == 'push' || inputs.academy_mode == true }}
+      AWS_ACADEMY: ${{ github.event_name == 'workflow_dispatch' && inputs.academy_mode == true || false }}
       MANAGE_IAM: "false"
       LAB_ROLE_ARN: ${{ github.event_name == 'push' && vars.LAB_ROLE_ARN || (inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN) }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -374,7 +374,7 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'prod' || inputs.environment }}
       ACTION: apply
-      AWS_ACADEMY: ${{ github.event_name == 'push' || inputs.academy_mode == true }}
+      AWS_ACADEMY: ${{ github.event_name == 'workflow_dispatch' && inputs.academy_mode == true || false }}
       MANAGE_IAM: "false"
       LAB_ROLE_ARN: ${{ github.event_name == 'push' && vars.LAB_ROLE_ARN || (inputs.lab_role_arn != '' && inputs.lab_role_arn || vars.LAB_ROLE_ARN) }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
