@@ -1,6 +1,35 @@
 name: Terraform CI/CD
 
 on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: string
+      action:
+        description: Terraform operation
+        required: true
+        type: string
+      academy_mode:
+        description: Use AWS Academy temporary credentials and LabRole
+        required: true
+        type: boolean
+      lab_role_arn:
+        description: Existing LabRole ARN (required when Academy mode is true)
+        required: false
+        type: string
+      confirm:
+        description: Type "APPLY PROD" for production apply or "DESTROY HML" for destroy
+        required: false
+        type: string
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: false
+      AWS_SECRET_ACCESS_KEY:
+        required: false
+      AWS_SESSION_TOKEN:
+        required: false
   pull_request:
   push:
     branches: [main, develop]
