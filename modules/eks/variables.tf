@@ -1,53 +1,34 @@
 variable "environment" {
   description = "Environment name (hml or prod)"
   type        = string
-  validation {
-    condition     = contains(["hml", "prod"], var.environment)
-    error_message = "environment must be exactly \"hml\" or \"prod\"."
-  }
-}
-
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
 }
 
 variable "aws_academy" {
-  description = "Use AWS Academy compatibility mode and the pre-existing LabRole"
+  description = "Use the pre-existing LabRole and disable IAM/IRSA resources"
   type        = bool
   default     = false
 }
 
 variable "manage_iam" {
-  description = "Allow Terraform to create IAM roles and IRSA resources"
+  description = "Allow creation of IAM roles"
   type        = bool
   default     = true
 }
 
 variable "lab_role_arn" {
-  description = "Existing LabRole ARN used by the EKS control plane and managed node group in Academy mode"
+  description = "Existing LabRole ARN for Academy mode"
   type        = string
   default     = ""
-
-  validation {
-    condition     = var.lab_role_arn == trimspace(var.lab_role_arn) && (var.lab_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.lab_role_arn)))
-    error_message = "lab_role_arn must be empty or a valid partition-neutral IAM role ARN."
-  }
 }
 
-check "aws_academy_configuration" {
-  assert {
-    condition     = !var.aws_academy || (!var.manage_iam && var.lab_role_arn != "")
-    error_message = "AWS Academy mode requires manage_iam=false and a non-empty lab_role_arn."
-  }
+variable "vpc_id" {
+  description = "VPC id from the vpc module"
+  type        = string
 }
 
-check "load_balancer_controller_role_configuration" {
-  assert {
-    condition     = var.manage_iam || var.aws_academy || var.load_balancer_controller_role_arn != ""
-    error_message = "load_balancer_controller_role_arn is required when manage_iam=false outside AWS Academy mode."
-  }
+variable "private_subnet_ids" {
+  description = "Private subnet ids from the vpc module (nodes and internal load balancers)"
+  type        = list(string)
 }
 
 variable "cluster_endpoint_public_access" {
@@ -111,4 +92,31 @@ variable "load_balancer_controller_role_arn" {
     condition     = var.load_balancer_controller_role_arn == trimspace(var.load_balancer_controller_role_arn) && (var.load_balancer_controller_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.load_balancer_controller_role_arn)))
     error_message = "load_balancer_controller_role_arn must be empty or a valid partition-neutral IAM role ARN."
   }
+}
+
+variable "cluster_version" {
+  description = "Kubernetes version"
+  type        = string
+  default     = "1.30"
+}
+
+variable "node_instance_types" {
+  description = "EC2 instance types for the managed node group"
+  type        = list(string)
+  default     = ["t3.medium"]
+}
+
+variable "node_desired_size" {
+  type    = number
+  default = 2
+}
+
+variable "node_min_size" {
+  type    = number
+  default = 1
+}
+
+variable "node_max_size" {
+  type    = number
+  default = 3
 }
