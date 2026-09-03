@@ -122,6 +122,7 @@ jobs:
       HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
       HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
       HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
+      AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED: "false"
     steps:
       - name: Guard production apply
         if: github.event_name == 'workflow_dispatch' && env.ENVIRONMENT == 'prod' && env.ACTION == 'apply'
@@ -238,6 +239,7 @@ jobs:
           }
           echo "Checking the account-qualified Terraform state (read-only)..."
           bash .github/scripts/inspect-backend.sh repo-k8s-infra "$ENVIRONMENT"
+          echo "AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED=true" >> "$GITHUB_ENV"
       - name: Inspect destroy state backend
         if: env.ACTION == 'destroy-plan' || env.ACTION == 'destroy'
         shell: bash
@@ -387,13 +389,33 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Terraform destroy plan
-        if: env.ACTION == 'destroy-plan' && env.DESTROY_HAS_STATE == 'true'
-        run: terraform plan -destroy -input=false
+        if: (env.ACTION == 'destroy-plan' || env.ACTION == 'destroy') && env.DESTROY_HAS_STATE == 'true'
+        run: terraform plan -destroy -input=false -out=destroy.tfplan
+      - name: Empty HML ECR repository before destroy
+        if: env.ACTION == 'destroy' && env.ENVIRONMENT == 'hml' && inputs.confirm == 'DESTROY HML' && env.DESTROY_HAS_STATE == 'true' && env.AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          next_token=""
+          while :; do
+            response_file="$(mktemp)"
+            trap 'rm -f "$response_file"' EXIT
+            if [[ -n "$next_token" ]]; then
+              aws ecr list-images --repository-name tc3-app-hml --filter tagStatus=ANY --no-paginate --max-results 100 --next-token "$next_token" --output json > "$response_file"
+            else
+              aws ecr list-images --repository-name tc3-app-hml --filter tagStatus=ANY --no-paginate --max-results 100 --output json > "$response_file"
+            fi
+            image_ids="$(jq -c '.imageIds // []' "$response_file")"
+            if [[ "$image_ids" != "[]" ]]; then
+              aws ecr batch-delete-image --repository-name tc3-app-hml --image-ids "$image_ids" >/dev/null
+            fi
+            next_token="$(jq -r '.nextToken // empty' "$response_file")"
+            rm -f "$response_file"
+            [[ -n "$next_token" ]] || break
+          done
       - name: Terraform destroy
         if: env.ACTION == 'destroy' && env.DESTROY_HAS_STATE == 'true'
-        run: |
-          terraform plan -destroy -input=false -out=destroy.tfplan
-          terraform apply -input=false destroy.tfplan
+        run: terraform apply -input=false destroy.tfplan
       - name: Restore HML EKS endpoint access
         if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
         shell: bash
