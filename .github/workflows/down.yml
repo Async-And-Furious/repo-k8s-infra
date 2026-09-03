@@ -1,0 +1,20 @@
+name: HML Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DESTROY HML to confirm deletion
+        required: true
+        type: string
+
+jobs:
+  down:
+    name: Destroy HML infrastructure
+    uses: ./.github/workflows/ci.yml
+    with:
+      environment: hml
+      action: destroy
+      academy_mode: false
+      confirm: ${{ inputs.confirm }}
+    secrets: inherit

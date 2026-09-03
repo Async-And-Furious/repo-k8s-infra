@@ -1,0 +1,14 @@
+name: HML Terraform Apply
+
+on:
+  workflow_dispatch:
+
+jobs:
+  up:
+    name: Apply HML infrastructure
+    uses: ./.github/workflows/ci.yml
+    with:
+      environment: hml
+      action: apply
+      academy_mode: false
+    secrets: inherit
