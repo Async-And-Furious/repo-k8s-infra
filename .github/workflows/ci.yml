@@ -23,6 +23,10 @@ on:
         description: Type "APPLY PROD" for production apply or "DESTROY HML" for destroy
         required: false
         type: string
+      force_unlock_id:
+        description: Optional Terraform lock ID override for confirmed HML destroy only
+        required: false
+        type: string
     secrets:
       AWS_ACCESS_KEY_ID:
         required: false
@@ -62,12 +66,17 @@ on:
         required: false
         default: ""
         type: string
+      force_unlock_id:
+        description: Optional stale Terraform lock ID for HML destroy only
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: terraform-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref }}
+  group: terraform-${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'prod' || (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.environment || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -113,6 +122,7 @@ jobs:
       HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
       HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
       HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
+      AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED: "false"
     steps:
       - name: Guard production apply
         if: github.event_name == 'workflow_dispatch' && env.ENVIRONMENT == 'prod' && env.ACTION == 'apply'
@@ -126,8 +136,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$ENVIRONMENT" == "hml" ]] || { echo "Destroy operations are restricted to HML." >&2; exit 1; }
-          [[ "$AWS_ACADEMY" == "true" ]] || { echo "Destroy operations require AWS Academy mode." >&2; exit 1; }
-          if [[ "$ACTION" == "destroy" && "$CONFIRM" != "DESTROY HML" ]]; then
+          if [[ "$CONFIRM" != "DESTROY HML" ]]; then
             echo 'Destroy requires confirm="DESTROY HML".' >&2
             exit 1
           fi
@@ -138,8 +147,8 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.13"
-      - name: Discover Academy HML runner address
-        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
+      - name: Discover HML runner address
+        if: env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -159,7 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$AWS_ACADEMY" == "true" && "$ENVIRONMENT" == "hml" ]]; then
+          if [[ "$ENVIRONMENT" == "hml" ]]; then
             jq -n --arg environment "$ENVIRONMENT" \
               --arg aws_region "$AWS_REGION" \
               --argjson aws_academy "$AWS_ACADEMY" \
@@ -204,13 +213,20 @@ jobs:
             [[ -n "$value" ]] && credentials=$((credentials + 1))
           done
           [[ "$credentials" == 3 ]] || { echo "Both HML and production require all three temporary AWS Academy credentials." >&2; exit 1; }
-      - name: Configure AWS credentials
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != ''
+      - name: Configure AWS credentials with session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials without session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN == ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Preflight AWS credentials and Terraform state
         shell: bash
@@ -223,6 +239,7 @@ jobs:
           }
           echo "Checking the account-qualified Terraform state (read-only)..."
           bash .github/scripts/inspect-backend.sh repo-k8s-infra "$ENVIRONMENT"
+          echo "AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED=true" >> "$GITHUB_ENV"
       - name: Inspect destroy state backend
         if: env.ACTION == 'destroy-plan' || env.ACTION == 'destroy'
         shell: bash
@@ -230,6 +247,70 @@ jobs:
       - name: Initialize Terraform for destroy
         if: env.DESTROY_STATE_OBJECT == 'true'
         run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Recover stale HML Terraform lock
+        if: env.ACTION == 'destroy' && env.ENVIRONMENT == 'hml' && inputs.confirm == 'DESTROY HML' && env.DESTROY_STATE_OBJECT == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bucket="$(awk -F'"' '$1 ~ /^bucket[[:space:]]*=/ { print $2 }' backend.hcl)"
+          state_key="$(awk -F'"' '$1 ~ /^key[[:space:]]*=/ { print $2 }' backend.hcl)"
+          expected_state_key="repo-k8s-infra/hml/terraform.tfstate"
+          [[ -n "$bucket" && "$state_key" == "$expected_state_key" ]] || { echo "Terraform backend is not the exact HML state; refusing lock recovery." >&2; exit 1; }
+
+          lock_file="$(mktemp)"
+          error_file="$(mktemp)"
+          trap 'rm -f "$lock_file" "$error_file"' EXIT
+          if ! aws s3api get-object --bucket "$bucket" --key "${state_key}.tflock" "$lock_file" >/dev/null 2>"$error_file"; then
+            if grep -Eq '\(404\)|Not Found|NoSuchBucket|NoSuchKey' "$error_file"; then
+              echo "No Terraform lock exists for the HML state; continuing."
+              exit 0
+            fi
+            echo "Unable to read the HML Terraform lock object; refusing lock recovery." >&2
+            exit 1
+          fi
+
+          lock_details="$(python3 - "$lock_file" <<'PY'
+          import datetime
+          import json
+          import pathlib
+          import sys
+          import time
+
+          try:
+              lock = json.loads(pathlib.Path(sys.argv[1]).read_text())
+              if not isinstance(lock, dict):
+                  raise ValueError
+              lock_id = lock.get("ID") or lock.get("LockID")
+              created = lock.get("Created") or lock.get("Timestamp")
+              if not isinstance(lock_id, str) or not lock_id or not isinstance(created, str) or not created:
+                  raise ValueError
+              timestamp = datetime.datetime.fromisoformat(created.replace("Z", "+00:00"))
+              if timestamp.tzinfo is None:
+                  raise ValueError
+              age = time.time() - timestamp.timestamp()
+              if age < 900:
+                  raise RuntimeError
+              print(f"{lock_id}\t{age:.0f}")
+          except RuntimeError:
+              raise SystemExit("Terraform lock is recent (under 15 minutes); refusing unlock.")
+          except (OSError, ValueError, TypeError, json.JSONDecodeError):
+              raise SystemExit("Terraform lock ID/timestamp could not be parsed; refusing unlock.")
+          PY
+          )"
+          IFS=$'\t' read -r discovered_lock_id lock_age <<< "$lock_details"
+          [[ "$discovered_lock_id" =~ ^[[:alnum:]_.:-]+$ && -n "$lock_age" ]] || { echo "Terraform lock ID/timestamp could not be parsed; refusing unlock." >&2; exit 1; }
+
+          if [[ -n "$FORCE_UNLOCK_ID" && "$FORCE_UNLOCK_ID" != "$discovered_lock_id" ]]; then
+            echo "force_unlock_id does not match the discovered HML lock; refusing unlock." >&2
+            exit 1
+          fi
+          selected_lock_id="${FORCE_UNLOCK_ID:-$discovered_lock_id}"
+          echo "::add-mask::$discovered_lock_id"
+          echo "Recovering confirmed stale HML Terraform lock (age ${lock_age}s)."
+          terraform force-unlock -force "$selected_lock_id"
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          FORCE_UNLOCK_ID: ${{ inputs.force_unlock_id }}
       - name: Check destroy state contents
         if: (env.ACTION == 'destroy-plan' || env.ACTION == 'destroy') && env.DESTROY_STATE_OBJECT == 'true'
         shell: bash
@@ -242,8 +323,8 @@ jobs:
             echo "DESTROY_HAS_STATE=false" >> "$GITHUB_ENV"
             echo "Terraform state contains no resources; destroy is a no-op."
           fi
-      - name: Allow Academy HML runner to reach existing EKS cluster
-        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
+      - name: Allow HML runner to reach existing EKS cluster
+        if: env.ENVIRONMENT == 'hml' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -308,14 +389,34 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Terraform destroy plan
-        if: env.ACTION == 'destroy-plan' && env.DESTROY_HAS_STATE == 'true'
-        run: terraform plan -destroy -input=false
+        if: (env.ACTION == 'destroy-plan' || env.ACTION == 'destroy') && env.DESTROY_HAS_STATE == 'true'
+        run: terraform plan -destroy -input=false -out=destroy.tfplan
+      - name: Empty HML ECR repository before destroy
+        if: env.ACTION == 'destroy' && env.ENVIRONMENT == 'hml' && inputs.confirm == 'DESTROY HML' && env.DESTROY_HAS_STATE == 'true' && env.AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          next_token=""
+          while :; do
+            response_file="$(mktemp)"
+            trap 'rm -f "$response_file"' EXIT
+            if [[ -n "$next_token" ]]; then
+              aws ecr list-images --repository-name tc3-app-hml --filter tagStatus=ANY --no-paginate --max-results 100 --next-token "$next_token" --output json > "$response_file"
+            else
+              aws ecr list-images --repository-name tc3-app-hml --filter tagStatus=ANY --no-paginate --max-results 100 --output json > "$response_file"
+            fi
+            image_ids="$(jq -c '.imageIds // []' "$response_file")"
+            if [[ "$image_ids" != "[]" ]]; then
+              aws ecr batch-delete-image --repository-name tc3-app-hml --image-ids "$image_ids" >/dev/null
+            fi
+            next_token="$(jq -r '.nextToken // empty' "$response_file")"
+            rm -f "$response_file"
+            [[ -n "$next_token" ]] || break
+          done
       - name: Terraform destroy
         if: env.ACTION == 'destroy' && env.DESTROY_HAS_STATE == 'true'
-        run: |
-          terraform plan -destroy -input=false -out=destroy.tfplan
-          terraform apply -input=false destroy.tfplan
-      - name: Disable Academy HML public EKS endpoint
+        run: terraform apply -input=false destroy.tfplan
+      - name: Restore HML EKS endpoint access
         if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
         shell: bash
         run: |
@@ -433,16 +534,23 @@ jobs:
             [[ -n "$value" ]] && credentials=$((credentials + 1))
           done
           [[ "$credentials" == 3 ]] || { echo "Both HML and production require all three temporary AWS Academy credentials." >&2; exit 1; }
-      - name: Configure AWS Academy credentials
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != ''
+      - name: Configure AWS credentials with session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Discover Academy HML runner address
-        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
+      - name: Configure AWS credentials without session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN == ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Discover HML runner address
+        if: env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -457,8 +565,8 @@ jobs:
           PY
           )"
           echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
-      - name: Allow Academy HML runner to reach existing EKS cluster
-        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
+      - name: Allow HML runner to reach existing EKS cluster
+        if: env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -507,7 +615,7 @@ jobs:
           name: terraform-plan-${{ env.ENVIRONMENT }}-${{ github.run_id }}
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve tfplan
-      - name: Disable Academy HML public EKS endpoint
+      - name: Restore HML EKS endpoint access
         if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
         shell: bash
         run: |
