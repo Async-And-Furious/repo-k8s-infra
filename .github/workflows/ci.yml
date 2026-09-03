@@ -23,6 +23,10 @@ on:
         description: Type "APPLY PROD" for production apply or "DESTROY HML" for destroy
         required: false
         type: string
+      force_unlock_id:
+        description: Optional Terraform lock ID override for confirmed HML destroy only
+        required: false
+        type: string
     secrets:
       AWS_ACCESS_KEY_ID:
         required: false
@@ -72,7 +76,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: terraform-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref }}
+  group: terraform-${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'prod' || (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.environment || github.ref }}
   cancel-in-progress: false
 
 env:
@@ -241,10 +245,67 @@ jobs:
       - name: Initialize Terraform for destroy
         if: env.DESTROY_STATE_OBJECT == 'true'
         run: terraform init -reconfigure -input=false -backend-config=backend.hcl
-      - name: Force-unlock HML Terraform state
-        if: env.ACTION == 'destroy' && env.ENVIRONMENT == 'hml' && inputs.confirm == 'DESTROY HML' && inputs.force_unlock_id != ''
+      - name: Recover stale HML Terraform lock
+        if: env.ACTION == 'destroy' && env.ENVIRONMENT == 'hml' && inputs.confirm == 'DESTROY HML' && env.DESTROY_STATE_OBJECT == 'true'
         shell: bash
-        run: terraform force-unlock -force "$FORCE_UNLOCK_ID"
+        run: |
+          set -euo pipefail
+          bucket="$(awk -F'"' '$1 ~ /^bucket[[:space:]]*=/ { print $2 }' backend.hcl)"
+          state_key="$(awk -F'"' '$1 ~ /^key[[:space:]]*=/ { print $2 }' backend.hcl)"
+          expected_state_key="repo-k8s-infra/hml/terraform.tfstate"
+          [[ -n "$bucket" && "$state_key" == "$expected_state_key" ]] || { echo "Terraform backend is not the exact HML state; refusing lock recovery." >&2; exit 1; }
+
+          lock_file="$(mktemp)"
+          error_file="$(mktemp)"
+          trap 'rm -f "$lock_file" "$error_file"' EXIT
+          if ! aws s3api get-object --bucket "$bucket" --key "${state_key}.tflock" "$lock_file" >/dev/null 2>"$error_file"; then
+            if grep -Eq '\(404\)|Not Found|NoSuchBucket|NoSuchKey' "$error_file"; then
+              echo "No Terraform lock exists for the HML state; continuing."
+              exit 0
+            fi
+            echo "Unable to read the HML Terraform lock object; refusing lock recovery." >&2
+            exit 1
+          fi
+
+          lock_details="$(python3 - "$lock_file" <<'PY'
+          import datetime
+          import json
+          import pathlib
+          import sys
+          import time
+
+          try:
+              lock = json.loads(pathlib.Path(sys.argv[1]).read_text())
+              if not isinstance(lock, dict):
+                  raise ValueError
+              lock_id = lock.get("ID") or lock.get("LockID")
+              created = lock.get("Created") or lock.get("Timestamp")
+              if not isinstance(lock_id, str) or not lock_id or not isinstance(created, str) or not created:
+                  raise ValueError
+              timestamp = datetime.datetime.fromisoformat(created.replace("Z", "+00:00"))
+              if timestamp.tzinfo is None:
+                  raise ValueError
+              age = time.time() - timestamp.timestamp()
+              if age < 900:
+                  raise RuntimeError
+              print(f"{lock_id}\t{age:.0f}")
+          except RuntimeError:
+              raise SystemExit("Terraform lock is recent (under 15 minutes); refusing unlock.")
+          except (OSError, ValueError, TypeError, json.JSONDecodeError):
+              raise SystemExit("Terraform lock ID/timestamp could not be parsed; refusing unlock.")
+          PY
+          )"
+          IFS=$'\t' read -r discovered_lock_id lock_age <<< "$lock_details"
+          [[ "$discovered_lock_id" =~ ^[[:alnum:]_.:-]+$ && -n "$lock_age" ]] || { echo "Terraform lock ID/timestamp could not be parsed; refusing unlock." >&2; exit 1; }
+
+          if [[ -n "$FORCE_UNLOCK_ID" && "$FORCE_UNLOCK_ID" != "$discovered_lock_id" ]]; then
+            echo "force_unlock_id does not match the discovered HML lock; refusing unlock." >&2
+            exit 1
+          fi
+          selected_lock_id="${FORCE_UNLOCK_ID:-$discovered_lock_id}"
+          echo "::add-mask::$discovered_lock_id"
+          echo "Recovering confirmed stale HML Terraform lock (age ${lock_age}s)."
+          terraform force-unlock -force "$selected_lock_id"
         env:
           CONFIRM: ${{ inputs.confirm }}
           FORCE_UNLOCK_ID: ${{ inputs.force_unlock_id }}
