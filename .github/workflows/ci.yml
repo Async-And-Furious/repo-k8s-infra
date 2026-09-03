@@ -62,6 +62,11 @@ on:
         required: false
         default: ""
         type: string
+      force_unlock_id:
+        description: Optional stale Terraform lock ID for HML destroy only
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -236,6 +241,13 @@ jobs:
       - name: Initialize Terraform for destroy
         if: env.DESTROY_STATE_OBJECT == 'true'
         run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Force-unlock HML Terraform state
+        if: env.ACTION == 'destroy' && env.ENVIRONMENT == 'hml' && inputs.confirm == 'DESTROY HML' && inputs.force_unlock_id != ''
+        shell: bash
+        run: terraform force-unlock -force "$FORCE_UNLOCK_ID"
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+          FORCE_UNLOCK_ID: ${{ inputs.force_unlock_id }}
       - name: Check destroy state contents
         if: (env.ACTION == 'destroy-plan' || env.ACTION == 'destroy') && env.DESTROY_STATE_OBJECT == 'true'
         shell: bash
