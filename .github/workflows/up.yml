@@ -3,6 +3,10 @@ name: HML Terraform Apply
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   up:
     name: Apply HML infrastructure
