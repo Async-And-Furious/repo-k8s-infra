@@ -126,8 +126,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$ENVIRONMENT" == "hml" ]] || { echo "Destroy operations are restricted to HML." >&2; exit 1; }
-          [[ "$AWS_ACADEMY" == "true" ]] || { echo "Destroy operations require AWS Academy mode." >&2; exit 1; }
-          if [[ "$ACTION" == "destroy" && "$CONFIRM" != "DESTROY HML" ]]; then
+          if [[ "$CONFIRM" != "DESTROY HML" ]]; then
             echo 'Destroy requires confirm="DESTROY HML".' >&2
             exit 1
           fi
@@ -204,13 +203,20 @@ jobs:
             [[ -n "$value" ]] && credentials=$((credentials + 1))
           done
           [[ "$credentials" == 3 ]] || { echo "Both HML and production require all three temporary AWS Academy credentials." >&2; exit 1; }
-      - name: Configure AWS credentials
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != ''
+      - name: Configure AWS credentials with session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials without session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN == ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Preflight AWS credentials and Terraform state
         shell: bash
@@ -433,13 +439,20 @@ jobs:
             [[ -n "$value" ]] && credentials=$((credentials + 1))
           done
           [[ "$credentials" == 3 ]] || { echo "Both HML and production require all three temporary AWS Academy credentials." >&2; exit 1; }
-      - name: Configure AWS Academy credentials
-        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != ''
+      - name: Configure AWS credentials with session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials without session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN == ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Discover Academy HML runner address
         if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
