@@ -146,8 +146,8 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.13"
-      - name: Discover Academy HML runner address
-        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
+      - name: Discover HML runner address
+        if: env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -167,7 +167,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$AWS_ACADEMY" == "true" && "$ENVIRONMENT" == "hml" ]]; then
+          if [[ "$ENVIRONMENT" == "hml" ]]; then
             jq -n --arg environment "$ENVIRONMENT" \
               --arg aws_region "$AWS_REGION" \
               --argjson aws_academy "$AWS_ACADEMY" \
@@ -321,8 +321,8 @@ jobs:
             echo "DESTROY_HAS_STATE=false" >> "$GITHUB_ENV"
             echo "Terraform state contains no resources; destroy is a no-op."
           fi
-      - name: Allow Academy HML runner to reach existing EKS cluster
-        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
+      - name: Allow HML runner to reach existing EKS cluster
+        if: env.ENVIRONMENT == 'hml' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -394,7 +394,7 @@ jobs:
         run: |
           terraform plan -destroy -input=false -out=destroy.tfplan
           terraform apply -input=false destroy.tfplan
-      - name: Disable Academy HML public EKS endpoint
+      - name: Restore HML EKS endpoint access
         if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
         shell: bash
         run: |
@@ -527,8 +527,8 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Discover Academy HML runner address
-        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
+      - name: Discover HML runner address
+        if: env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -543,8 +543,8 @@ jobs:
           PY
           )"
           echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
-      - name: Allow Academy HML runner to reach existing EKS cluster
-        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
+      - name: Allow HML runner to reach existing EKS cluster
+        if: env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -593,7 +593,7 @@ jobs:
           name: terraform-plan-${{ env.ENVIRONMENT }}-${{ github.run_id }}
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve tfplan
-      - name: Disable Academy HML public EKS endpoint
+      - name: Restore HML EKS endpoint access
         if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
         shell: bash
         run: |
