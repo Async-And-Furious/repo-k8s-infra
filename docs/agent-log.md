@@ -1,5 +1,13 @@
 # Agent log
 
+## 2026-09-04 (idempotent production ECR cleanup)
+
+- Made target-environment ECR cleanup derive its repository name and treat a
+  missing repository as a successful no-op, while preserving existing image
+  cleanup, destroy guards, Terraform state, endpoint restoration, and scoped
+  permissions.
+- No Terraform destroy or AWS destructive operation was performed.
+
 ## 2026-09-04 (explicit production destroy workflow)
 
 - Added workflow-dispatch-only HML/production destroy guards with exact
