@@ -1,5 +1,21 @@
 # Agent log
 
+## 2026-09-03 (Temporary production EKS runner access)
+
+- Allowed only the current GitHub runner `/32` to reach the EKS API during
+  production plan/apply, and restored the captured endpoint settings in an
+  always-running cleanup step.
+- No AWS apply or destroy was performed.
+
+## 2026-09-04 (Free Tier node sizing)
+
+- Defaulted HML and production managed nodes to the AWS Free Tier-eligible
+  `t3.micro`, while retaining an explicit `node_instance_types` override.
+- Made Helm releases wait for the complete EKS module so they do not race a
+  failed or still-unreachable node group.
+- Kept subnet selection sourced from the VPC module; no manual subnet inputs,
+  AWS apply, or destroy was performed.
+
 ## 2026-09-03 (EKS version drift)
 
 - Made the root EKS version optional so existing clusters are not planned toward
