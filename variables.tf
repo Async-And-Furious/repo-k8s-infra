@@ -38,6 +38,46 @@ variable "node_instance_types" {
   }
 }
 
+variable "node_desired_size" {
+  description = "Managed node group desired capacity for HML and production"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.node_desired_size >= 1 && var.node_desired_size == floor(var.node_desired_size)
+    error_message = "node_desired_size must be a positive whole number."
+  }
+}
+
+variable "node_min_size" {
+  description = "Managed node group minimum capacity for HML and production"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.node_min_size >= 1 && var.node_min_size == floor(var.node_min_size)
+    error_message = "node_min_size must be a positive whole number."
+  }
+}
+
+variable "node_max_size" {
+  description = "Managed node group maximum capacity for HML and production"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.node_max_size >= 1 && var.node_max_size == floor(var.node_max_size)
+    error_message = "node_max_size must be a positive whole number."
+  }
+}
+
+check "node_capacity_configuration" {
+  assert {
+    condition     = var.node_min_size <= var.node_desired_size && var.node_desired_size <= var.node_max_size
+    error_message = "Managed node capacity must satisfy min <= desired <= max."
+  }
+}
+
 variable "aws_academy" {
   description = "Use AWS Academy compatibility mode and the pre-existing LabRole"
   type        = bool

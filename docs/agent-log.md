@@ -1,5 +1,13 @@
 # Agent log
 
+## 2026-09-04 (managed node group capacity)
+
+- Set the HML and production managed node group to a fixed three-node capacity
+  (`min=3`, `desired=3`, `max=3`) so migration Jobs have schedulable capacity
+  without introducing an autoscaling range; `t3.micro` and private networking
+  are unchanged.
+- No Terraform validate apply or AWS operation was performed.
+
 ## 2026-09-04 (Load Balancer Controller replica capacity)
 
 - Set chart 1.8.2 `replicaCount` to one so the controller fits the configured
