@@ -1,5 +1,13 @@
 # Agent log
 
+## 2026-09-03 (production apply endpoint configuration)
+
+- Made production Terraform desired endpoint settings match the temporary
+  runner-only public `/32` access during both plan and apply; production apply
+  re-plans on its runner so the CIDR cannot become stale between jobs.
+- Existing endpoint settings are still restored after production plan/apply,
+  including failures. No AWS apply or destroy was performed.
+
 ## 2026-09-03 (production runner endpoint access)
 
 - Added production plan/apply runner /32 EKS endpoint access with captured-settings cleanup; cluster-not-found remains a no-op.

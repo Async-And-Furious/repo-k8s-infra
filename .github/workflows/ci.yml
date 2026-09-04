@@ -209,12 +209,15 @@ jobs:
               --arg aws_region "$AWS_REGION" \
               --argjson aws_academy "$AWS_ACADEMY" \
               --argjson manage_iam "$MANAGE_IAM" \
-              --arg lab_role_arn "$LAB_ROLE_ARN" '{
+              --arg lab_role_arn "$LAB_ROLE_ARN" \
+              --arg runner_cidr "$RUNNER_CIDR" '{
                 environment: $environment,
                 aws_region: $aws_region,
                 aws_academy: $aws_academy,
                 manage_iam: $manage_iam,
-                lab_role_arn: $lab_role_arn
+                lab_role_arn: $lab_role_arn,
+                cluster_endpoint_public_access: true,
+                cluster_endpoint_public_access_cidrs: [$runner_cidr]
               }' > terraform.auto.tfvars.json
           fi
       - name: Validate Terraform mode
@@ -765,10 +768,33 @@ jobs:
             cat "$error_file" >&2
             exit 1
           fi
+      - name: Prepare production Terraform variables
+        if: env.ENVIRONMENT == 'prod'
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg environment "$ENVIRONMENT" \
+            --arg aws_region "$AWS_REGION" \
+            --argjson aws_academy "$AWS_ACADEMY" \
+            --argjson manage_iam "$MANAGE_IAM" \
+            --arg lab_role_arn "$LAB_ROLE_ARN" \
+            --arg runner_cidr "$RUNNER_CIDR" '{
+              environment: $environment,
+              aws_region: $aws_region,
+              aws_academy: $aws_academy,
+              manage_iam: $manage_iam,
+              lab_role_arn: $lab_role_arn,
+              cluster_endpoint_public_access: true,
+              cluster_endpoint_public_access_cidrs: [$runner_cidr]
+            }' > terraform.auto.tfvars.json
       - name: Download Terraform plan artifact
+        if: env.ENVIRONMENT == 'hml'
         uses: actions/download-artifact@v4
         with:
           name: terraform-plan-${{ env.ENVIRONMENT }}-${{ github.run_id }}
+      - name: Terraform plan for production runner
+        if: env.ENVIRONMENT == 'prod'
+        run: terraform plan -input=false -out=tfplan
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve tfplan
       - name: Restore HML EKS endpoint access
@@ -848,4 +874,4 @@ jobs:
           fi
       - name: Remove generated Terraform inputs
         if: always()
-        run: rm -f backend.hcl tfplan
+        run: rm -f terraform.auto.tfvars.json backend.hcl tfplan
