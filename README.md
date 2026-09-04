@@ -10,6 +10,10 @@ In AWS Academy mode the controller uses the node group's existing LabRole
 instead of IRSA. The Kubernetes API is private by default; set
 `cluster_endpoint_public_access=true` only when required and provide no more
 than 40 narrow entries in `cluster_endpoint_public_access_cidrs`.
+The managed node group intentionally defaults to the single `t3.micro` instance
+type. Avoiding an instance-type list prevents Terraform/EKS from replacing the
+node group and temporarily overlapping its nodes, which can exceed the account's
+vCPU quota.
 
 ## Scope
 

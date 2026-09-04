@@ -1,5 +1,14 @@
 # Agent log
 
+## 2026-09-04 (managed node group instance type stability)
+
+- Reverted the managed node group default to the previously working single
+  `t3.micro` instance type. Avoiding an instance-type list prevents replacement
+  node groups and temporary node overlap from exceeding the account's vCPU
+  quota; the fixed `min=3`, `desired=3`, `max=3` capacity is unchanged.
+- Preserved AL2023, private networking, IAM, and security groups. No Terraform
+  apply, destructive command, or AWS operation was performed.
+
 ## 2026-09-04 (managed node group capacity resilience)
 
 - Added `t3a.micro` alongside `t3.micro` in the EKS managed node group's
