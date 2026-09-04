@@ -4,6 +4,8 @@ Tech Challenge Fase 3 — VPC, EKS and ECR via Terraform.
 
 The EKS module also bootstraps the AWS Load Balancer Controller (including its
 TargetGroupBinding CRD) and Metrics Server with pinned Helm chart versions.
+The EKS version is preserved for existing clusters by default; set
+`cluster_version` explicitly when an intentional upgrade is approved.
 In AWS Academy mode the controller uses the node group's existing LabRole
 instead of IRSA. The Kubernetes API is private by default; set
 `cluster_endpoint_public_access=true` only when required and provide no more

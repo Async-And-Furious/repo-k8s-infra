@@ -13,6 +13,17 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "cluster_version" {
+  description = "Optional EKS Kubernetes version; leave unset to preserve the version reported by an existing cluster"
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cluster_version == null || can(regex("^1\\.[0-9]+$", var.cluster_version))
+    error_message = "cluster_version must be null or a Kubernetes major.minor version such as 1.30."
+  }
+}
+
 variable "aws_academy" {
   description = "Use AWS Academy compatibility mode and the pre-existing LabRole"
   type        = bool
