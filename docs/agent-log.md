@@ -1,5 +1,15 @@
 # Agent log
 
+## 2026-09-04 (HML apply runner-specific Terraform plan)
+
+- Fixed HML apply to generate `terraform.auto.tfvars.json` from the apply
+  runner's current `/32`, create a fresh `tfplan` on that runner, and apply it
+  instead of using the plan-runner artifact. Production planning/apply behavior
+  was left unchanged.
+- Preserved temporary HML runner-only endpoint exposure and unconditional
+  restoration of the original settings, with a final read-only restoration
+  assertion. No AWS apply or workflow dispatch was performed.
+
 ## 2026-09-04 (stage 1 managed node group replacement capacity)
 
 - Temporarily set the AL2023 `t3.micro` managed node group to
