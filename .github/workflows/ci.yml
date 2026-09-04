@@ -118,10 +118,10 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       CLUSTER_NAME: tc3-eks-${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'prod' || inputs.environment }}
-      HML_ENDPOINT_EXPOSED: "false"
-      HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
-      HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
-      HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
+      EKS_ENDPOINT_EXPOSED: "false"
+      EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
+      EKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
+      EKS_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
       AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED: "false"
     steps:
       - name: Guard production apply
@@ -147,8 +147,8 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "~> 1.13"
-      - name: Discover HML runner address
-        if: env.ENVIRONMENT == 'hml'
+      - name: Discover runner address for temporary EKS access
+        if: env.ENVIRONMENT == 'hml' || (env.ENVIRONMENT == 'prod' && (env.ACTION == 'plan' || env.ACTION == 'apply'))
         shell: bash
         run: |
           set -euo pipefail
@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$ENVIRONMENT" == "hml" ]]; then
+          if [[ "$ENVIRONMENT" == "hml" || "$ENVIRONMENT" == "prod" ]]; then
             jq -n --arg environment "$ENVIRONMENT" \
               --arg aws_region "$AWS_REGION" \
               --argjson aws_academy "$AWS_ACADEMY" \
@@ -323,8 +323,8 @@ jobs:
             echo "DESTROY_HAS_STATE=false" >> "$GITHUB_ENV"
             echo "Terraform state contains no resources; destroy is a no-op."
           fi
-      - name: Allow HML runner to reach existing EKS cluster
-        if: env.ENVIRONMENT == 'hml' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
+      - name: Allow runner to reach existing EKS cluster
+        if: (env.ENVIRONMENT == 'hml' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')) || (env.ENVIRONMENT == 'prod' && (env.ACTION == 'plan' || env.ACTION == 'apply'))
         shell: bash
         run: |
           set -euo pipefail
@@ -334,7 +334,7 @@ jobs:
             private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
             public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
             public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
-            printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nHML_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
+            printf 'EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nEKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nEKS_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nEKS_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
             status=""
             if [[ "$private_access" == "True" && "$public_access" == "True" && "$public_cidrs" == "$RUNNER_CIDR" ]]; then
               status="Successful"
@@ -416,21 +416,21 @@ jobs:
       - name: Terraform destroy
         if: env.ACTION == 'destroy' && env.DESTROY_HAS_STATE == 'true'
         run: terraform apply -input=false destroy.tfplan
-      - name: Restore HML EKS endpoint access
-        if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
+      - name: Restore EKS endpoint access
+        if: always() && env.EKS_ENDPOINT_EXPOSED == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && -n "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" ]] || { echo "Original EKS endpoint settings were not captured; refusing cleanup." >&2; exit 1; }
+          [[ -n "$EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && -n "$EKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" ]] || { echo "Original EKS endpoint settings were not captured; refusing cleanup." >&2; exit 1; }
           error_file="$(mktemp)"
           trap 'rm -f "$error_file"' EXIT
           if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
             current_private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
             current_public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
             current_public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
-            private_access="$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS"
-            public_access="$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS"
-            public_cidrs="$HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS"
+            private_access="$EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS"
+            public_access="$EKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS"
+            public_cidrs="$EKS_ENDPOINT_ORIGINAL_PUBLIC_CIDRS"
             status=""
             if [[ "$current_private_access" == "$private_access" && "$current_public_access" == "$public_access" && "$current_public_cidrs" == "$public_cidrs" ]]; then
               status="Successful"
@@ -511,10 +511,10 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       CLUSTER_NAME: tc3-eks-${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'prod' || inputs.environment }}
-      HML_ENDPOINT_EXPOSED: "false"
-      HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
-      HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
-      HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
+      EKS_ENDPOINT_EXPOSED: "false"
+      EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
+      EKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
+      EKS_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
     steps:
       - name: Guard production apply
         if: github.event_name == 'workflow_dispatch' && env.ENVIRONMENT == 'prod'
@@ -549,8 +549,8 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - name: Discover HML runner address
-        if: env.ENVIRONMENT == 'hml'
+      - name: Discover runner address for temporary EKS access
+        if: env.ENVIRONMENT == 'hml' || env.ENVIRONMENT == 'prod'
         shell: bash
         run: |
           set -euo pipefail
@@ -565,8 +565,8 @@ jobs:
           PY
           )"
           echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
-      - name: Allow HML runner to reach existing EKS cluster
-        if: env.ENVIRONMENT == 'hml'
+      - name: Allow runner to reach existing EKS cluster
+        if: env.ENVIRONMENT == 'hml' || env.ENVIRONMENT == 'prod'
         shell: bash
         run: |
           set -euo pipefail
@@ -578,13 +578,13 @@ jobs:
             public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
           elif grep -q 'ResourceNotFoundException' "$error_file"; then
             echo "EKS cluster does not exist yet; Terraform will create it with runner-only public access."
-            printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=\nHML_ENDPOINT_EXPOSED=false\n' >> "$GITHUB_ENV"
+            printf 'EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=False\nEKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=False\nEKS_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=\nEKS_ENDPOINT_EXPOSED=true\n' >> "$GITHUB_ENV"
             exit 0
           else
             cat "$error_file" >&2
             exit 1
           fi
-          printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nHML_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
+          printf 'EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nEKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nEKS_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nEKS_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
           if [[ "$public_access" != "True" || "$public_cidrs" != "$RUNNER_CIDR" ]]; then
             config_file="$(mktemp)"
             trap 'rm -f "$config_file"' EXIT
@@ -615,20 +615,20 @@ jobs:
           name: terraform-plan-${{ env.ENVIRONMENT }}-${{ github.run_id }}
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve tfplan
-      - name: Restore HML EKS endpoint access
-        if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
+      - name: Restore EKS endpoint access
+        if: always() && env.EKS_ENDPOINT_EXPOSED == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          [[ -n "$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && -n "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" ]] || { echo "Original EKS endpoint settings were not captured; refusing cleanup." >&2; exit 1; }
+          [[ -n "$EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && -n "$EKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" ]] || { echo "Original EKS endpoint settings were not captured; refusing cleanup." >&2; exit 1; }
           error_file="$(mktemp)"
           trap 'rm -f "$error_file"' EXIT
           if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
             config_file="$(mktemp)"
             trap 'rm -f "$config_file" "$error_file"' EXIT
-            private_json="$( [[ "$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" == "True" ]] && echo true || echo false )"
-            public_json="$( [[ "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" == "True" ]] && echo true || echo false )"
-            jq -n --argjson private "$private_json" --argjson public "$public_json" --arg cidrs "$HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" '{endpointPrivateAccess: $private, endpointPublicAccess: $public, publicAccessCidrs: (if $cidrs == "" then [] else ($cidrs | split(",")) end)}' > "$config_file"
+            private_json="$( [[ "$EKS_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" == "True" ]] && echo true || echo false )"
+            public_json="$( [[ "$EKS_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" == "True" ]] && echo true || echo false )"
+            jq -n --argjson private "$private_json" --argjson public "$public_json" --arg cidrs "$EKS_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" '{endpointPrivateAccess: $private, endpointPublicAccess: $public, publicAccessCidrs: (if $cidrs == "" then [] else ($cidrs | split(",")) end)}' > "$config_file"
             update_id=""
             for attempt in {1..60}; do
               if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>/tmp/eks-restore-error)"; then break; fi
