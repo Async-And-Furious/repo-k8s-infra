@@ -1,5 +1,13 @@
 # Agent log
 
+## 2026-09-04 (managed node group capacity resilience)
+
+- Added `t3a.micro` alongside `t3.micro` in the EKS managed node group's
+  `instance_types` so EC2 can use either capacity type after NodeCreationFailure.
+- Preserved AL2023, fixed HML/production capacity at three nodes, private
+  subnets, IAM, and security groups. No Terraform apply or AWS operation was
+  performed.
+
 ## 2026-09-04 (managed node group capacity)
 
 - Set the HML and production managed node group to a fixed three-node capacity
