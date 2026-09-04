@@ -39,9 +39,9 @@ variable "node_instance_types" {
 }
 
 variable "node_desired_size" {
-  description = "Managed node group desired capacity for HML and production"
+  description = "Stage 1 managed node group desired capacity for HML and production; scale to 3 after a successful apply"
   type        = number
-  default     = 3
+  default     = 2
 
   validation {
     condition     = var.node_desired_size >= 1 && var.node_desired_size == floor(var.node_desired_size)
@@ -50,9 +50,9 @@ variable "node_desired_size" {
 }
 
 variable "node_min_size" {
-  description = "Managed node group minimum capacity for HML and production"
+  description = "Stage 1 managed node group minimum capacity for HML and production; scale to 3 after a successful apply"
   type        = number
-  default     = 3
+  default     = 2
 
   validation {
     condition     = var.node_min_size >= 1 && var.node_min_size == floor(var.node_min_size)
@@ -61,9 +61,9 @@ variable "node_min_size" {
 }
 
 variable "node_max_size" {
-  description = "Managed node group maximum capacity for HML and production"
+  description = "Stage 1 managed node group maximum capacity for HML and production; scale to 3 after a successful apply"
   type        = number
-  default     = 3
+  default     = 2
 
   validation {
     condition     = var.node_max_size >= 1 && var.node_max_size == floor(var.node_max_size)
