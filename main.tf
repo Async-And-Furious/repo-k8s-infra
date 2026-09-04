@@ -85,6 +85,16 @@ resource "helm_release" "aws_load_balancer_controller" {
   }
 
   set {
+    name  = "region"
+    value = var.aws_region
+  }
+
+  set {
+    name  = "vpcId"
+    value = module.vpc.vpc_id
+  }
+
+  set {
     name  = "serviceAccount.create"
     value = "true"
   }

@@ -1,5 +1,12 @@
 # Agent log
 
+## 2026-09-04 (HML Load Balancer Controller startup)
+
+- Passed the AWS region and VPC ID to chart 1.8.2 and completed the controller
+  IAM policy with its directly required EC2 and ELB actions.
+- Preserved EKS readiness, IMDSv2, endpoint security, and HML/production paths;
+  no AWS apply was performed.
+
 ## 2026-09-04 (HML EKS AMI and endpoint cleanup)
 
 - Selected the account-supported `AL2023_x86_64_STANDARD` managed-node AMI for
