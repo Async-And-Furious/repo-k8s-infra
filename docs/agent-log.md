@@ -1,5 +1,14 @@
 # Agent log
 
+## 2026-09-04 (explicit production destroy workflow)
+
+- Added workflow-dispatch-only HML/production destroy guards with exact
+  environment confirmations; production remains behind the protected
+  `production` Environment.
+- Production destroy now preserves the existing state/backend flow, restores
+  temporary EKS endpoint access, and empties only the target environment's ECR
+  repository. No destroy was executed.
+
 ## 2026-09-03 (production apply endpoint configuration)
 
 - Made production Terraform desired endpoint settings match the temporary

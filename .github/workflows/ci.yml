@@ -20,7 +20,7 @@ on:
         required: false
         type: string
       confirm:
-        description: Type "APPLY PROD" for production apply or "DESTROY HML" for destroy
+        description: Type "APPLY PROD", "DESTROY HML", or "DESTROY PROD" as confirmation
         required: false
         type: string
       force_unlock_id:
@@ -62,7 +62,7 @@ on:
         default: ""
         type: string
       confirm:
-        description: Type "APPLY PROD" for production apply or "DESTROY HML" for destroy
+        description: Type "APPLY PROD", "DESTROY HML", or "DESTROY PROD" as confirmation
         required: false
         default: ""
         type: string
@@ -134,19 +134,25 @@ jobs:
           [ "$CONFIRM" = "APPLY PROD" ] || { echo 'Production apply requires confirm="APPLY PROD".' >&2; exit 1; }
         env:
           CONFIRM: ${{ inputs.confirm }}
-      - name: Guard HML destroy
+      - name: Guard destroy
         if: env.ACTION == 'destroy-plan' || env.ACTION == 'destroy'
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$ENVIRONMENT" == "hml" ]] || { echo "Destroy operations are restricted to HML." >&2; exit 1; }
-          if [[ "$CONFIRM" != "DESTROY HML" ]]; then
-            echo 'Destroy requires confirm="DESTROY HML".' >&2
+          [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]] || { echo "Destroy operations require workflow_dispatch." >&2; exit 1; }
+          case "$ENVIRONMENT" in
+            hml) expected_confirm="DESTROY HML" ;;
+            prod) expected_confirm="DESTROY PROD" ;;
+            *) echo "Destroy target must be hml or prod." >&2; exit 1 ;;
+          esac
+          if [[ "$CONFIRM" != "$expected_confirm" ]]; then
+            echo "Destroy requires confirm=\"$expected_confirm\"." >&2
             exit 1
           fi
         env:
           ACTION: ${{ inputs.action }}
           CONFIRM: ${{ inputs.confirm }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -395,7 +401,7 @@ jobs:
             exit 1
           fi
       - name: Allow production runner to reach existing EKS cluster
-        if: env.ENVIRONMENT == 'prod' && (env.ACTION == 'plan' || env.ACTION == 'apply')
+        if: env.ENVIRONMENT == 'prod' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -452,8 +458,8 @@ jobs:
       - name: Terraform destroy plan
         if: (env.ACTION == 'destroy-plan' || env.ACTION == 'destroy') && env.DESTROY_HAS_STATE == 'true'
         run: terraform plan -destroy -input=false -out=destroy.tfplan
-      - name: Empty HML ECR repository before destroy
-        if: env.ACTION == 'destroy' && env.ENVIRONMENT == 'hml' && inputs.confirm == 'DESTROY HML' && env.DESTROY_HAS_STATE == 'true' && env.AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED == 'true'
+      - name: Empty target ECR repository before destroy
+        if: env.ACTION == 'destroy' && (env.ENVIRONMENT == 'hml' || env.ENVIRONMENT == 'prod') && env.DESTROY_HAS_STATE == 'true' && env.AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -462,13 +468,13 @@ jobs:
             response_file="$(mktemp)"
             trap 'rm -f "$response_file"' EXIT
             if [[ -n "$next_token" ]]; then
-              aws ecr list-images --repository-name tc3-app-hml --filter tagStatus=ANY --no-paginate --max-results 100 --next-token "$next_token" --output json > "$response_file"
+              aws ecr list-images --repository-name "tc3-app-$ENVIRONMENT" --filter tagStatus=ANY --no-paginate --max-results 100 --next-token "$next_token" --output json > "$response_file"
             else
-              aws ecr list-images --repository-name tc3-app-hml --filter tagStatus=ANY --no-paginate --max-results 100 --output json > "$response_file"
+              aws ecr list-images --repository-name "tc3-app-$ENVIRONMENT" --filter tagStatus=ANY --no-paginate --max-results 100 --output json > "$response_file"
             fi
             image_ids="$(jq -c '.imageIds // []' "$response_file")"
             if [[ "$image_ids" != "[]" ]]; then
-              aws ecr batch-delete-image --repository-name tc3-app-hml --image-ids "$image_ids" >/dev/null
+              aws ecr batch-delete-image --repository-name "tc3-app-$ENVIRONMENT" --image-ids "$image_ids" >/dev/null
             fi
             next_token="$(jq -r '.nextToken // empty' "$response_file")"
             rm -f "$response_file"
@@ -578,17 +584,18 @@ jobs:
         shell: bash
         run: |
           if [[ "$DESTROY_HAS_STATE" == "true" ]]; then
-            echo "### HML ${ACTION} used the existing Terraform state (${JOB_STATUS})" >> "$GITHUB_STEP_SUMMARY"
+            echo "### ${ENVIRONMENT} ${ACTION} used the existing Terraform state (${JOB_STATUS})" >> "$GITHUB_STEP_SUMMARY"
           elif [[ "$DESTROY_STATE_OBJECT" == "false" || "$DESTROY_HAS_STATE" == "false" ]]; then
-            echo "### HML ${ACTION}: no resources in Terraform state; no-op" >> "$GITHUB_STEP_SUMMARY"
+            echo "### ${ENVIRONMENT} ${ACTION}: no resources in Terraform state; no-op" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "### HML ${ACTION} did not reach state evaluation (${JOB_STATUS})" >> "$GITHUB_STEP_SUMMARY"
+            echo "### ${ENVIRONMENT} ${ACTION} did not reach state evaluation (${JOB_STATUS})" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "The workflow does not delete the S3 bucket or Terraform state object." >> "$GITHUB_STEP_SUMMARY"
         env:
           ACTION: ${{ inputs.action }}
           DESTROY_HAS_STATE: ${{ env.DESTROY_HAS_STATE }}
           DESTROY_STATE_OBJECT: ${{ env.DESTROY_STATE_OBJECT }}
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
           JOB_STATUS: ${{ job.status }}
       - name: Remove generated Terraform inputs
         if: always()
