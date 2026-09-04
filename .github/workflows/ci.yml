@@ -820,6 +820,26 @@ jobs:
         run: terraform plan -input=false -out=tfplan
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve tfplan
+      - name: Diagnose HML load balancer controller failure
+        if: failure() && env.ENVIRONMENT == 'hml'
+        shell: bash
+        run: |
+          set +e
+          aws eks update-kubeconfig --name tc3-eks-hml --region "$AWS_REGION"
+          echo '=== Controller pods (wide) ==='
+          kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller -o wide
+          echo '=== Controller deployment describe ==='
+          kubectl describe deployment -n kube-system aws-load-balancer-controller
+          echo '=== Controller pod describe ==='
+          kubectl describe pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
+          echo '=== Recent all-namespace events ==='
+          kubectl get events --all-namespaces --sort-by=.lastTimestamp | tail -n 100
+          echo '=== Webhook service and endpoints ==='
+          kubectl get service,endpoints -n kube-system aws-load-balancer-webhook-service -o wide
+          echo '=== TargetGroupBinding CRD ==='
+          kubectl get crd targetgroupbindings.elbv2.k8s.aws -o yaml
+          echo '=== Controller logs (last 200 lines) ==='
+          kubectl logs -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller --tail=200 --prefix
       - name: Restore HML EKS endpoint access
         if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
         shell: bash
