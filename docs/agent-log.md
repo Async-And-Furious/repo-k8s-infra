@@ -1,5 +1,12 @@
 # Agent log
 
+## 2026-09-03 (EKS version drift)
+
+- Made the root EKS version optional so existing clusters are not planned toward
+  the module's historical 1.30 default, which could invoke an invalid rollback.
+- Intentional upgrades remain available through an explicit `cluster_version`.
+- No AWS apply or destroy was performed.
+
 ## 2026-08-31 (Trivy findings)
 
 - Restricted the internal ALB egress to the VPC CIDR, enabled invalid-header
