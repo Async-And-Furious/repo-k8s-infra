@@ -10,6 +10,10 @@ provider "aws" {
   }
 }
 
+locals {
+  node_instance_types = coalesce(var.node_instance_types, ["t3.micro"])
+}
+
 module "vpc" {
   source = "./modules/vpc"
 
@@ -19,10 +23,11 @@ module "vpc" {
 module "eks" {
   source = "./modules/eks"
 
-  environment        = var.environment
-  cluster_version    = var.cluster_version
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
+  environment         = var.environment
+  cluster_version     = var.cluster_version
+  node_instance_types = local.node_instance_types
+  vpc_id              = module.vpc.vpc_id
+  private_subnet_ids  = module.vpc.private_subnet_ids
 
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
@@ -63,6 +68,8 @@ provider "helm" {
 }
 
 resource "helm_release" "aws_load_balancer_controller" {
+  depends_on = [module.eks]
+
   name             = "aws-load-balancer-controller"
   namespace        = "kube-system"
   create_namespace = false
@@ -98,6 +105,8 @@ resource "helm_release" "aws_load_balancer_controller" {
 }
 
 resource "helm_release" "metrics_server" {
+  depends_on = [module.eks]
+
   name             = "metrics-server"
   namespace        = "kube-system"
   create_namespace = false
