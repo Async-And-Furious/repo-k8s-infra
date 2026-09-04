@@ -11,7 +11,7 @@ provider "aws" {
 }
 
 locals {
-  node_instance_types = coalesce(var.node_instance_types, ["t3.micro", "t3a.micro"])
+  node_instance_types = coalesce(var.node_instance_types, ["t3.micro"])
 }
 
 module "vpc" {

@@ -25,7 +25,7 @@ variable "cluster_version" {
 }
 
 variable "node_instance_types" {
-  description = "Optional EC2 instance types for the managed node group; defaults to t3.micro and t3a.micro for HML and production"
+  description = "Optional EC2 instance types for the managed node group; defaults to the AWS Free Tier-eligible t3.micro for HML and production"
   type        = list(string)
   default     = null
 
