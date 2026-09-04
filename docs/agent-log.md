@@ -1,5 +1,10 @@
 # Agent log
 
+## 2026-09-03 (production runner endpoint access)
+
+- Added production plan/apply runner /32 EKS endpoint access with captured-settings cleanup; cluster-not-found remains a no-op.
+- No AWS apply or destroy was performed.
+
 ## 2026-09-04 (Free Tier node sizing)
 
 - Defaulted HML and production managed nodes to the AWS Free Tier-eligible

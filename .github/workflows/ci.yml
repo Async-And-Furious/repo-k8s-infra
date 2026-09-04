@@ -122,6 +122,10 @@ jobs:
       HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
       HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
       HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
+      PROD_ENDPOINT_EXPOSED: "false"
+      PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
+      PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
+      PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
       AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED: "false"
     steps:
       - name: Guard production apply
@@ -149,6 +153,23 @@ jobs:
           terraform_version: "~> 1.13"
       - name: Discover HML runner address
         if: env.ENVIRONMENT == 'hml'
+        shell: bash
+        run: |
+          set -euo pipefail
+          address="$(curl -fsSL --proto '=https' https://checkip.amazonaws.com)"
+          RUNNER_CIDR="$(python3 - "$address" <<'PY'
+          import ipaddress
+          import sys
+
+          address = ipaddress.ip_address(sys.argv[1].strip())
+          if address.version != 4 or not address.is_global:
+              raise SystemExit("Runner address is not a globally routable IPv4 address")
+          print(f"{address}/32")
+          PY
+          )"
+          echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
+      - name: Discover production runner address
+        if: env.ENVIRONMENT == 'prod'
         shell: bash
         run: |
           set -euo pipefail
@@ -370,6 +391,43 @@ jobs:
             cat "$error_file" >&2
             exit 1
           fi
+      - name: Allow production runner to reach existing EKS cluster
+        if: env.ENVIRONMENT == 'prod' && (env.ACTION == 'plan' || env.ACTION == 'apply')
+        shell: bash
+        run: |
+          set -euo pipefail
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
+            private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
+            public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
+            public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
+            printf 'PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nPROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nPROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nPROD_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
+            if [[ "$private_access" != "True" || "$public_access" != "True" || "$public_cidrs" != "$RUNNER_CIDR" ]]; then
+              config_file="$(mktemp)"
+              trap 'rm -f "$config_file" "$error_file"' EXIT
+              jq -n --arg cidr "$RUNNER_CIDR" '{endpointPrivateAccess: true, endpointPublicAccess: true, publicAccessCidrs: [$cidr]}' > "$config_file"
+              update_id=""
+              for attempt in {1..60}; do
+                if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>"$error_file")"; then break; fi
+                grep -q 'ResourceInUseException' "$error_file" || { cat "$error_file" >&2; exit 1; }
+                sleep 10
+              done
+              [[ -n "$update_id" ]] || { echo "Timed out waiting to start EKS endpoint update." >&2; exit 1; }
+              for attempt in {1..60}; do
+                status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+                [[ "$status" == "Successful" ]] && break
+                [[ "$status" == "InProgress" ]] || { aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2; exit 1; }
+                sleep 10
+              done
+              [[ "$status" == "Successful" ]] || { echo "Timed out waiting for EKS endpoint update." >&2; exit 1; }
+            fi
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster does not exist; continuing."
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
       - name: Bootstrap Terraform state backend
         if: env.ACTION == 'plan' || env.ACTION == 'apply'
         shell: bash
@@ -471,6 +529,47 @@ jobs:
             cat "$error_file" >&2
             exit 1
           fi
+      - name: Restore production EKS endpoint access
+        if: always() && env.PROD_ENDPOINT_EXPOSED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && -n "$PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" ]] || { echo "Original production EKS endpoint settings were not captured; refusing cleanup." >&2; exit 1; }
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
+            current_private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
+            current_public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
+            current_public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
+            if [[ "$current_private_access" == "$PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && "$current_public_access" == "$PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" && "$current_public_cidrs" == "$PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" ]]; then
+              echo "EKS endpoint already matches its original settings."
+              exit 0
+            fi
+            config_file="$(mktemp)"
+            trap 'rm -f "$config_file" "$error_file"' EXIT
+            private_json="$( [[ "$PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" == "True" ]] && echo true || echo false )"
+            public_json="$( [[ "$PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" == "True" ]] && echo true || echo false )"
+            jq -n --argjson private "$private_json" --argjson public "$public_json" --arg cidrs "$PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" '{endpointPrivateAccess: $private, endpointPublicAccess: $public, publicAccessCidrs: (if $cidrs == "" then [] else ($cidrs | split(",")) end)}' > "$config_file"
+            update_id=""
+            for attempt in {1..60}; do
+              if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>"$error_file")"; then break; fi
+              grep -q 'ResourceInUseException' "$error_file" || { cat "$error_file" >&2; exit 1; }
+              sleep 10
+            done
+            [[ -n "$update_id" ]] || { echo "Timed out waiting to restore production EKS endpoint settings." >&2; exit 1; }
+            for attempt in {1..60}; do
+              status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+              [[ "$status" == "Successful" ]] && break
+              [[ "$status" == "InProgress" ]] || { aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2; exit 1; }
+              sleep 10
+            done
+            [[ "$status" == "Successful" ]] || { echo "Timed out waiting to restore production EKS endpoint settings." >&2; exit 1; }
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster no longer exists; no endpoint restore is needed."
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
       - name: Summarize destroy
         if: always() && (env.ACTION == 'destroy-plan' || env.ACTION == 'destroy')
         shell: bash
@@ -515,6 +614,10 @@ jobs:
       HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
       HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
       HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
+      PROD_ENDPOINT_EXPOSED: "false"
+      PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
+      PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
+      PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
     steps:
       - name: Guard production apply
         if: github.event_name == 'workflow_dispatch' && env.ENVIRONMENT == 'prod'
@@ -609,6 +712,59 @@ jobs:
         run: bash .github/scripts/bootstrap-backend.sh repo-k8s-infra "$ENVIRONMENT"
       - name: Initialize Terraform
         run: terraform init -reconfigure -input=false -backend-config=backend.hcl
+      - name: Discover production runner address
+        if: env.ENVIRONMENT == 'prod'
+        shell: bash
+        run: |
+          set -euo pipefail
+          address="$(curl -fsSL --proto '=https' https://checkip.amazonaws.com)"
+          RUNNER_CIDR="$(python3 - "$address" <<'PY'
+          import ipaddress
+          import sys
+          address = ipaddress.ip_address(sys.argv[1].strip())
+          if address.version != 4 or not address.is_global:
+              raise SystemExit("Runner address is not a globally routable IPv4 address")
+          print(f"{address}/32")
+          PY
+          )"
+          echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
+      - name: Allow production runner to reach existing EKS cluster
+        if: env.ENVIRONMENT == 'prod'
+        shell: bash
+        run: |
+          set -euo pipefail
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
+            private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
+            public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
+            public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
+            printf 'PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nPROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nPROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nPROD_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
+            if [[ "$private_access" != "True" || "$public_access" != "True" || "$public_cidrs" != "$RUNNER_CIDR" ]]; then
+              config_file="$(mktemp)"
+              trap 'rm -f "$config_file" "$error_file"' EXIT
+              jq -n --arg cidr "$RUNNER_CIDR" '{endpointPrivateAccess: true, endpointPublicAccess: true, publicAccessCidrs: [$cidr]}' > "$config_file"
+              update_id=""
+              for attempt in {1..60}; do
+                if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>"$error_file")"; then break; fi
+                grep -q 'ResourceInUseException' "$error_file" || { cat "$error_file" >&2; exit 1; }
+                sleep 10
+              done
+              [[ -n "$update_id" ]] || { echo "Timed out waiting to start EKS endpoint update." >&2; exit 1; }
+              for attempt in {1..60}; do
+                status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+                [[ "$status" == "Successful" ]] && break
+                [[ "$status" == "InProgress" ]] || { aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2; exit 1; }
+                sleep 10
+              done
+              [[ "$status" == "Successful" ]] || { echo "Timed out waiting for EKS endpoint update." >&2; exit 1; }
+            fi
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster does not exist yet; no endpoint restore is needed."
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
       - name: Download Terraform plan artifact
         uses: actions/download-artifact@v4
         with:
@@ -643,6 +799,47 @@ jobs:
               sleep 10
             done
             [[ "$status" == "Successful" ]] || { echo "Timed out waiting to restore EKS endpoint settings." >&2; exit 1; }
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster no longer exists; no endpoint restore is needed."
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
+      - name: Restore production EKS endpoint access
+        if: always() && env.PROD_ENDPOINT_EXPOSED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && -n "$PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" ]] || { echo "Original production EKS endpoint settings were not captured; refusing cleanup." >&2; exit 1; }
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
+            current_private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
+            current_public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
+            current_public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
+            if [[ "$current_private_access" == "$PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && "$current_public_access" == "$PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" && "$current_public_cidrs" == "$PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" ]]; then
+              echo "EKS endpoint already matches its original settings."
+              exit 0
+            fi
+            config_file="$(mktemp)"
+            trap 'rm -f "$config_file" "$error_file"' EXIT
+            private_json="$( [[ "$PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" == "True" ]] && echo true || echo false )"
+            public_json="$( [[ "$PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" == "True" ]] && echo true || echo false )"
+            jq -n --argjson private "$private_json" --argjson public "$public_json" --arg cidrs "$PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" '{endpointPrivateAccess: $private, endpointPublicAccess: $public, publicAccessCidrs: (if $cidrs == "" then [] else ($cidrs | split(",")) end)}' > "$config_file"
+            update_id=""
+            for attempt in {1..60}; do
+              if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>"$error_file")"; then break; fi
+              grep -q 'ResourceInUseException' "$error_file" || { cat "$error_file" >&2; exit 1; }
+              sleep 10
+            done
+            [[ -n "$update_id" ]] || { echo "Timed out waiting to restore production EKS endpoint settings." >&2; exit 1; }
+            for attempt in {1..60}; do
+              status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+              [[ "$status" == "Successful" ]] && break
+              [[ "$status" == "InProgress" ]] || { aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2; exit 1; }
+              sleep 10
+            done
+            [[ "$status" == "Successful" ]] || { echo "Timed out waiting to restore production EKS endpoint settings." >&2; exit 1; }
           elif grep -q 'ResourceNotFoundException' "$error_file"; then
             echo "EKS cluster no longer exists; no endpoint restore is needed."
           else
