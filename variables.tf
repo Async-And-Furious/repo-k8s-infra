@@ -24,6 +24,20 @@ variable "cluster_version" {
   }
 }
 
+variable "node_instance_types" {
+  description = "Optional EC2 instance types for the managed node group; defaults to the AWS Free Tier-eligible t3.micro for HML and production"
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition = var.node_instance_types == null || (
+      length(var.node_instance_types) > 0 &&
+      alltrue([for instance_type in var.node_instance_types : trimspace(instance_type) != ""])
+    )
+    error_message = "node_instance_types must be null or a non-empty list of instance types."
+  }
+}
+
 variable "aws_academy" {
   description = "Use AWS Academy compatibility mode and the pre-existing LabRole"
   type        = bool
