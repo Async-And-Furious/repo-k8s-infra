@@ -1,5 +1,11 @@
 # Agent log
 
+## 2026-09-04 (Load Balancer Controller replica capacity)
+
+- Set chart 1.8.2 `replicaCount` to one so the controller fits the configured
+  `t3.micro` node pod capacity, preserving readiness, webhook, IRSA, and network
+  settings. No AWS apply was performed.
+
 ## 2026-09-04 (HML Load Balancer Controller startup)
 
 - Passed the AWS region and VPC ID to chart 1.8.2 and completed the controller

@@ -79,6 +79,12 @@ resource "helm_release" "aws_load_balancer_controller" {
   # The chart owns the TargetGroupBinding CRD; keep it installed in both environments.
   skip_crds = false
 
+  # ponytail: one replica fits the configured t3.micro node pod capacity.
+  set {
+    name  = "replicaCount"
+    value = "1"
+  }
+
   set {
     name  = "clusterName"
     value = module.eks.cluster_name
