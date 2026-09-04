@@ -1,5 +1,13 @@
 # Agent log
 
+## 2026-09-04 (HML EKS AMI and endpoint cleanup)
+
+- Selected the account-supported `AL2023_x86_64_STANDARD` managed-node AMI for
+  EKS 1.30 while preserving per-node-group AMI and version overrides.
+- HML plan/apply now corrects private endpoint access before Terraform and
+  restores endpoint settings in always cleanup, including newly created
+  clusters. No AWS apply or destroy was performed.
+
 ## 2026-09-04 (idempotent production ECR cleanup)
 
 - Made target-environment ECR cleanup derive its repository name and treat a

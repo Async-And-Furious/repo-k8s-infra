@@ -60,7 +60,10 @@ module "eks" {
 
   eks_managed_node_groups = {
     default = {
-      instance_types  = var.node_instance_types
+      instance_types = var.node_instance_types
+      # AL2023 is supported for the account's EKS 1.30 managed nodes. Values
+      # supplied on an individual node group still take precedence.
+      ami_type        = "AL2023_x86_64_STANDARD"
       desired_size    = var.node_desired_size
       min_size        = var.node_min_size
       max_size        = var.node_max_size
