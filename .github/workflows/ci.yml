@@ -706,15 +706,15 @@ jobs:
             public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
             public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
           elif grep -q 'ResourceNotFoundException' "$error_file"; then
-            echo "EKS cluster does not exist yet; Terraform will create it with runner-only public access."
-            printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=\nHML_ENDPOINT_EXPOSED=false\n' >> "$GITHUB_ENV"
+            echo "EKS cluster does not exist yet; Terraform will create it with runner-only public access and cleanup will restore the private default."
+            printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=True\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=False\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=\nHML_ENDPOINT_EXPOSED=true\n' >> "$GITHUB_ENV"
             exit 0
           else
             cat "$error_file" >&2
             exit 1
           fi
           printf 'HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS=%s\nHML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS=%s\nHML_ENDPOINT_EXPOSED=true\n' "$private_access" "$public_access" "$public_cidrs" >> "$GITHUB_ENV"
-          if [[ "$public_access" != "True" || "$public_cidrs" != "$RUNNER_CIDR" ]]; then
+          if [[ "$private_access" != "True" || "$public_access" != "True" || "$public_cidrs" != "$RUNNER_CIDR" ]]; then
             config_file="$(mktemp)"
             trap 'rm -f "$config_file"' EXIT
             jq -n --arg cidr "$RUNNER_CIDR" '{endpointPrivateAccess: true, endpointPublicAccess: true, publicAccessCidrs: [$cidr]}' > "$config_file"
