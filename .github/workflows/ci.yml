@@ -810,11 +810,28 @@ jobs:
               cluster_endpoint_public_access: true,
               cluster_endpoint_public_access_cidrs: [$runner_cidr]
             }' > terraform.auto.tfvars.json
-      - name: Download Terraform plan artifact
+      - name: Prepare HML Terraform variables
         if: env.ENVIRONMENT == 'hml'
-        uses: actions/download-artifact@v4
-        with:
-          name: terraform-plan-${{ env.ENVIRONMENT }}-${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n --arg environment "$ENVIRONMENT" \
+            --arg aws_region "$AWS_REGION" \
+            --argjson aws_academy "$AWS_ACADEMY" \
+            --argjson manage_iam "$MANAGE_IAM" \
+            --arg lab_role_arn "$LAB_ROLE_ARN" \
+            --arg runner_cidr "$RUNNER_CIDR" '{
+              environment: $environment,
+              aws_region: $aws_region,
+              aws_academy: $aws_academy,
+              manage_iam: $manage_iam,
+              lab_role_arn: $lab_role_arn,
+              cluster_endpoint_public_access: true,
+              cluster_endpoint_public_access_cidrs: [$runner_cidr]
+            }' > terraform.auto.tfvars.json
+      - name: Terraform plan for HML runner
+        if: env.ENVIRONMENT == 'hml'
+        run: terraform plan -input=false -out=tfplan
       - name: Terraform plan for production runner
         if: env.ENVIRONMENT == 'prod'
         run: terraform plan -input=false -out=tfplan
@@ -911,6 +928,25 @@ jobs:
             [[ "$status" == "Successful" ]] || { echo "Timed out waiting to restore production EKS endpoint settings." >&2; exit 1; }
           elif grep -q 'ResourceNotFoundException' "$error_file"; then
             echo "EKS cluster no longer exists; no endpoint restore is needed."
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
+      - name: Assert HML EKS endpoint was restored
+        if: always() && env.HML_ENDPOINT_EXPOSED == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          error_file="$(mktemp)"
+          trap 'rm -f "$error_file"' EXIT
+          if aws eks describe-cluster --name "$CLUSTER_NAME" >/dev/null 2>"$error_file"; then
+            private_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPrivateAccess --output text)"
+            public_access="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query cluster.resourcesVpcConfig.endpointPublicAccess --output text)"
+            public_cidrs="$(aws eks describe-cluster --name "$CLUSTER_NAME" --query 'join(`,`,cluster.resourcesVpcConfig.publicAccessCidrs)' --output text)"
+            [[ "$private_access" == "$HML_ENDPOINT_ORIGINAL_PRIVATE_ACCESS" && "$public_access" == "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" && "$public_cidrs" == "$HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" ]] || { echo "HML EKS endpoint does not match its original settings after cleanup." >&2; exit 1; }
+            echo "HML EKS endpoint matches its original settings (read-only assertion)."
+          elif grep -q 'ResourceNotFoundException' "$error_file"; then
+            echo "EKS cluster no longer exists; endpoint assertion is not applicable."
           else
             cat "$error_file" >&2
             exit 1
