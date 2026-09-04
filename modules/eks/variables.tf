@@ -113,10 +113,10 @@ variable "node_desired_size" {
 
 variable "node_min_size" {
   type    = number
-  default = 1
+  default = 2
 }
 
 variable "node_max_size" {
   type    = number
-  default = 3
+  default = 2
 }

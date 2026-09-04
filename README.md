@@ -13,7 +13,10 @@ than 40 narrow entries in `cluster_endpoint_public_access_cidrs`.
 The managed node group intentionally defaults to the single `t3.micro` instance
 type. Avoiding an instance-type list prevents Terraform/EKS from replacing the
 node group and temporarily overlapping its nodes, which can exceed the account's
-vCPU quota.
+vCPU quota. Stage 1 temporarily sets the managed node group to
+`min=2`, `desired=2`, and `max=2`, so replacement stays within the account's
+8-vCPU limit. After the stage 1 apply succeeds, a follow-up must scale all three
+values back to 3.
 
 ## Scope
 

@@ -1,5 +1,13 @@
 # Agent log
 
+## 2026-09-04 (stage 1 managed node group replacement capacity)
+
+- Temporarily set the AL2023 `t3.micro` managed node group to
+  `min=2`, `desired=2`, and `max=2` so replacement can complete within the
+  account's 8-vCPU limit while two old nodes remain.
+- This is stage 1 only; after a successful apply, a follow-up must scale all
+  three values back to 3. No AWS apply was performed.
+
 ## 2026-09-04 (managed node group instance type stability)
 
 - Reverted the managed node group default to the previously working single
