@@ -50,9 +50,9 @@ variable "node_desired_size" {
 }
 
 variable "node_min_size" {
-  description = "Managed node group minimum capacity for HML and production"
+  description = "Managed node group minimum capacity for HML and production; raise after the initial scale-out"
   type        = number
-  default     = 3
+  default     = 2
 
   validation {
     condition     = var.node_min_size >= 1 && var.node_min_size == floor(var.node_min_size)
