@@ -207,7 +207,8 @@ jobs:
                   aws_academy: $aws_academy,
                   manage_iam: $manage_iam,
                   lab_role_arn: $lab_role_arn,
-                  cluster_endpoint_public_access: true,
+                  node_desired_size: 3,
+                   cluster_endpoint_public_access: true,
                   cluster_endpoint_public_access_cidrs: [$runner_cidr]
                 }' > terraform.auto.tfvars.json
           else
@@ -222,7 +223,8 @@ jobs:
                 aws_academy: $aws_academy,
                 manage_iam: $manage_iam,
                 lab_role_arn: $lab_role_arn,
-                cluster_endpoint_public_access: true,
+                node_desired_size: 3,
+                 cluster_endpoint_public_access: true,
                 cluster_endpoint_public_access_cidrs: [$runner_cidr]
               }' > terraform.auto.tfvars.json
           fi
