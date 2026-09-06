@@ -448,7 +448,7 @@ jobs:
         run: terraform init -reconfigure -input=false -backend-config=backend.hcl
       - name: Terraform plan
         if: env.ACTION == 'plan' || env.ACTION == 'apply'
-        run: terraform plan -input=false -out=tfplan
+        run: terraform plan -input=false -var='node_desired_size=3' -out=tfplan
       - name: Save Terraform plan artifact
         if: env.ACTION == 'plan' || env.ACTION == 'apply'
         uses: actions/upload-artifact@v4
@@ -833,7 +833,7 @@ jobs:
             }' > terraform.auto.tfvars.json
       - name: Terraform plan for HML runner
         if: env.ENVIRONMENT == 'hml'
-        run: terraform plan -input=false -out=tfplan
+        run: terraform plan -input=false -var='node_desired_size=3' -out=tfplan
       - name: Terraform plan for production runner
         if: env.ENVIRONMENT == 'prod'
         run: terraform plan -input=false -out=tfplan
