@@ -1,5 +1,12 @@
 # Agent log
 
+## 2026-09-06 (read-only HML EC2 capacity diagnostics)
+
+- Added a workflow-dispatch-only diagnostic workflow using the normal AWS
+  credential configuration pattern to report EC2, Auto Scaling, EKS, account,
+  and vCPU quota information in `us-east-1` without changing resources.
+- No AWS apply, destroy, termination, or modification was performed.
+
 ## 2026-09-04 (HML apply runner-specific Terraform plan)
 
 - Fixed HML apply to generate `terraform.auto.tfvars.json` from the apply
