@@ -58,6 +58,16 @@ module "internal_alb" {
   health_check_path  = "/api/v1/health/live"
 }
 
+resource "aws_security_group_rule" "nodes_from_internal_alb" {
+  description              = "Allow the private ALB to reach EKS application pods"
+  type                     = "ingress"
+  from_port                = 3000
+  to_port                  = 3000
+  protocol                 = "tcp"
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = module.internal_alb.security_group_id
+}
+
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
