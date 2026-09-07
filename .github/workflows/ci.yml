@@ -446,9 +446,9 @@ jobs:
           set -euo pipefail
           nodegroup="$(aws eks list-nodegroups --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --query 'nodegroups[0]' --output text)"
           [[ -n "$nodegroup" && "$nodegroup" != "None" ]] || exit 0
-          update_id="$(aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name "$nodegroup" --scaling-config minSize=1,maxSize=2,desiredSize=1 --query 'update.id' --output text)"
+          update_id="$(aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name "$nodegroup" --scaling-config minSize=2,maxSize=3,desiredSize=2 --query 'update.id' --output text)"
           aws eks wait nodegroup-active --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name "$nodegroup"
-          echo "Temporarily reduced HML node group $nodegroup to one node before the instance-type replacement."
+          echo "Reconverged HML node group $nodegroup to min=2, desired=2 before the instance-type replacement."
       - name: Bootstrap Terraform state backend
         if: env.ACTION == 'plan' || env.ACTION == 'apply'
         shell: bash
