@@ -11,7 +11,7 @@ provider "aws" {
 }
 
 locals {
-  node_instance_types = coalesce(var.node_instance_types, ["t3.micro"])
+  node_instance_types = coalesce(var.node_instance_types, ["t3.small"])
 }
 
 module "vpc" {
@@ -82,7 +82,7 @@ resource "helm_release" "aws_load_balancer_controller" {
   # The chart owns the TargetGroupBinding CRD; keep it installed in both environments.
   skip_crds = false
 
-  # ponytail: one replica fits the configured t3.micro node pod capacity.
+  # ponytail: one replica keeps control-plane add-ons within the small-node budget.
   set {
     name  = "replicaCount"
     value = "1"
