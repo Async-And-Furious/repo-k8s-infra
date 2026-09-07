@@ -61,6 +61,7 @@ module "eks" {
   eks_managed_node_groups = {
     default = {
       instance_types = var.node_instance_types
+      capacity_type  = var.environment == "hml" ? "SPOT" : "ON_DEMAND"
       # AL2023 is supported for the account's EKS 1.30 managed nodes. Values
       # supplied on an individual node group still take precedence.
       ami_type        = "AL2023_x86_64_STANDARD"
