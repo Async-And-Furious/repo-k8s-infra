@@ -860,6 +860,26 @@ jobs:
         run: terraform plan -input=false -out=tfplan
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve tfplan
+      - name: Diagnose New Relic bundle
+        if: env.ENVIRONMENT == 'prod'
+        shell: bash
+        run: |
+          set +e
+          aws eks update-kubeconfig --name tc3-eks-prod --region "$AWS_REGION"
+          echo '=== Helm release status ==='
+          kubectl get pods -n newrelic -o wide
+          echo '=== DaemonSets ==='
+          kubectl get daemonset -n newrelic -o wide
+          echo '=== Deployments ==='
+          kubectl get deployment -n newrelic -o wide
+          echo '=== Pod describes ==='
+          kubectl describe pods -n newrelic
+          echo '=== Recent namespace events ==='
+          kubectl get events -n newrelic --sort-by=.lastTimestamp | tail -n 100
+          echo '=== newrelic-infrastructure logs (last 100 lines per pod) ==='
+          kubectl logs -n newrelic -l app.kubernetes.io/name=newrelic-infrastructure --tail=100 --prefix --all-containers
+          echo '=== newrelic-logging logs (last 100 lines per pod) ==='
+          kubectl logs -n newrelic -l app.kubernetes.io/name=newrelic-logging --tail=100 --prefix --all-containers
       - name: Diagnose HML load balancer controller failure
         if: failure() && env.ENVIRONMENT == 'hml'
         shell: bash
