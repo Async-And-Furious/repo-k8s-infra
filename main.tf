@@ -104,3 +104,52 @@ resource "helm_release" "metrics_server" {
   chart            = "metrics-server"
   version          = "3.12.2"
 }
+
+# New Relic Kubernetes integration (issue #163). Minimal footprint on purpose:
+# only the infrastructure agent, log forwarding and kube-state-metrics are
+# enabled. nri-metadata-injection (a cluster-wide mutating admission webhook)
+# and nri-kube-events/newrelic-prometheus-agent/pixie are left disabled until
+# the basics are validated end-to-end and node capacity headroom is confirmed.
+resource "helm_release" "newrelic_bundle" {
+  name             = "newrelic-bundle"
+  namespace        = "newrelic"
+  create_namespace = true
+  repository       = "https://helm-charts.newrelic.com"
+  chart            = "nri-bundle"
+  version          = "8.0.24"
+
+  set {
+    name  = "global.cluster"
+    value = module.eks.cluster_name
+  }
+
+  set_sensitive {
+    name  = "global.licenseKey"
+    value = var.new_relic_license_key
+  }
+
+  set {
+    name  = "global.lowDataMode"
+    value = "true"
+  }
+
+  set {
+    name  = "newrelic-infrastructure.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "newrelic-logging.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "kube-state-metrics.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "nri-metadata-injection.enabled"
+    value = "false"
+  }
+}
