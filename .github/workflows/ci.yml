@@ -895,19 +895,27 @@ jobs:
             public_json="$( [[ "$HML_ENDPOINT_ORIGINAL_PUBLIC_ACCESS" == "True" ]] && echo true || echo false )"
             jq -n --argjson private "$private_json" --argjson public "$public_json" --arg cidrs "$HML_ENDPOINT_ORIGINAL_PUBLIC_CIDRS" '{endpointPrivateAccess: $private, endpointPublicAccess: $public, publicAccessCidrs: (if $cidrs == "" then [] else ($cidrs | split(",")) end)}' > "$config_file"
             update_id=""
+            already_desired=false
             for attempt in {1..60}; do
               if update_id="$(aws eks update-cluster-config --name "$CLUSTER_NAME" --resources-vpc-config "file://$config_file" --query update.id --output text 2>/tmp/eks-restore-error)"; then break; fi
+              if [[ "$private_json" == true && "$public_json" == false ]] && grep -Fq 'InvalidParameterException' /tmp/eks-restore-error && grep -Fq 'Cluster endpoint access configuration is already set to the requested values.' /tmp/eks-restore-error; then
+                echo "HML EKS endpoint is already at the desired private-only configuration; no restore is needed."
+                already_desired=true
+                break
+              fi
               grep -q 'ResourceInUseException' /tmp/eks-restore-error || { cat /tmp/eks-restore-error >&2; exit 1; }
               sleep 10
             done
-            [[ -n "$update_id" ]] || { echo "Timed out waiting to restore EKS endpoint settings." >&2; exit 1; }
-            for attempt in {1..60}; do
-              status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
-              [[ "$status" == "Successful" ]] && break
-              [[ "$status" == "InProgress" ]] || { aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2; exit 1; }
-              sleep 10
-            done
-            [[ "$status" == "Successful" ]] || { echo "Timed out waiting to restore EKS endpoint settings." >&2; exit 1; }
+            if [[ "$already_desired" != true ]]; then
+              [[ -n "$update_id" ]] || { echo "Timed out waiting to restore EKS endpoint settings." >&2; exit 1; }
+              for attempt in {1..60}; do
+                status="$(aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query update.status --output text)"
+                [[ "$status" == "Successful" ]] && break
+                [[ "$status" == "InProgress" ]] || { aws eks describe-update --name "$CLUSTER_NAME" --update-id "$update_id" --query 'update.{status:status,errors:errors}' --output json >&2; exit 1; }
+                sleep 10
+              done
+              [[ "$status" == "Successful" ]] || { echo "Timed out waiting to restore EKS endpoint settings." >&2; exit 1; }
+            fi
           elif grep -q 'ResourceNotFoundException' "$error_file"; then
             echo "EKS cluster no longer exists; no endpoint restore is needed."
           else
