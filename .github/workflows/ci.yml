@@ -861,11 +861,10 @@ jobs:
       - name: Terraform apply
         run: terraform apply -input=false -auto-approve tfplan
       - name: Diagnose New Relic bundle
-        if: env.ENVIRONMENT == 'prod'
         shell: bash
         run: |
           set +e
-          aws eks update-kubeconfig --name tc3-eks-prod --region "$AWS_REGION"
+          aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION"
           echo '=== Helm release status ==='
           kubectl get pods -n newrelic -o wide
           echo '=== DaemonSets ==='
