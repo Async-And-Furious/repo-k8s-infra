@@ -177,3 +177,9 @@ variable "load_balancer_controller_role_arn" {
     error_message = "load_balancer_controller_role_arn must be empty or a valid partition-neutral IAM role ARN."
   }
 }
+
+variable "new_relic_license_key" {
+  description = "New Relic ingest license key for the Kubernetes infrastructure integration (nri-bundle)"
+  type        = string
+  sensitive   = true
+}
