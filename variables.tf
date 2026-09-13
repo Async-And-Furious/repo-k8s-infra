@@ -183,3 +183,14 @@ variable "new_relic_license_key" {
   type        = string
   sensitive   = true
 }
+
+variable "new_relic_account_id" {
+  description = "New Relic account ID that owns the dashboards managed for this environment (issue #166)"
+  type        = number
+}
+
+variable "new_relic_api_key" {
+  description = "New Relic User API key (NRAK-...) used by the newrelic Terraform provider to manage dashboards; distinct from new_relic_license_key (an ingest key, not usable here)"
+  type        = string
+  sensitive   = true
+}
