@@ -352,3 +352,144 @@ resource "newrelic_one_dashboard" "observability" {
     }
   }
 }
+
+# Operational alerts (issue #167). Same account/data as #163/#166 — no new
+# instrumentation. One policy per environment with 5 conditions covering
+# app availability, error rate, node resource pressure and crash loops,
+# routed to a single email destination.
+resource "newrelic_alert_policy" "observability" {
+  name                = "tc3-observability-${var.environment}"
+  incident_preference = "PER_CONDITION_AND_TARGET"
+}
+
+resource "newrelic_nrql_alert_condition" "app_unavailable" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "App indisponível (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT count(*) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
+  }
+
+  critical {
+    operator              = "below"
+    threshold             = 1
+    threshold_duration    = 300
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "high_error_rate" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "Taxa de erro alta (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT percentage(count(*), WHERE error IS true) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
+  }
+
+  critical {
+    operator              = "above"
+    threshold             = 5
+    threshold_duration    = 300
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "high_cpu" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "CPU excessiva (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT average(cpuUsedCores/cpuLimitCores) * 100 FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}'"
+  }
+
+  critical {
+    operator              = "above"
+    threshold             = 80
+    threshold_duration    = 600
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "high_memory" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "Memória excessiva (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT average(memoryWorkingSetBytes/memoryLimitBytes) * 100 FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}'"
+  }
+
+  critical {
+    operator              = "above"
+    threshold             = 80
+    threshold_duration    = 600
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "crash_loop" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "Pod em crash loop (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT sum(restartCount) FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}' FACET podName"
+  }
+
+  critical {
+    operator              = "above"
+    threshold             = 3
+    threshold_duration    = 600
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_notification_destination" "email" {
+  name = "tc3-observability-email-${var.environment}"
+  type = "EMAIL"
+
+  property {
+    key   = "email"
+    value = var.new_relic_alert_email
+  }
+}
+
+resource "newrelic_notification_channel" "email" {
+  name           = "tc3-observability-email-${var.environment}"
+  type           = "EMAIL"
+  product        = "IINT"
+  destination_id = newrelic_notification_destination.email.id
+
+  property {
+    key   = "subject"
+    value = "[tc3-${var.environment}] {{issueTitle}}"
+  }
+}
+
+resource "newrelic_workflow" "observability" {
+  name                  = "tc3-observability-${var.environment}"
+  muting_rules_handling = "NOTIFY_ALL_ISSUES"
+
+  issues_filter {
+    name = "tc3-observability-${var.environment}-policy-filter"
+    type = "FILTER"
+
+    predicate {
+      attribute = "labels.policyIds"
+      operator  = "EXACTLY_MATCHES"
+      values    = [newrelic_alert_policy.observability.id]
+    }
+  }
+
+  destination {
+    channel_id = newrelic_notification_channel.email.id
+  }
+}

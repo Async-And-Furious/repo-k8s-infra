@@ -194,3 +194,8 @@ variable "new_relic_api_key" {
   type        = string
   sensitive   = true
 }
+
+variable "new_relic_alert_email" {
+  description = "Email address notified by the operational alert policy (issue #167)"
+  type        = string
+}
