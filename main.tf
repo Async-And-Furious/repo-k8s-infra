@@ -243,7 +243,7 @@ resource "newrelic_one_dashboard" "observability" {
       height = 3
 
       nrql_query {
-        query = "SELECT percentage(count(*), WHERE error IS true) FROM Transaction WHERE appName = '${local.new_relic_app_name}' TIMESERIES"
+        query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction WHERE appName = '${local.new_relic_app_name}' TIMESERIES"
       }
     }
 
@@ -387,7 +387,7 @@ resource "newrelic_nrql_alert_condition" "high_error_rate" {
   violation_time_limit_seconds = 3600
 
   nrql {
-    query = "SELECT percentage(count(*), WHERE error IS true) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
+    query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
   }
 
   critical {
