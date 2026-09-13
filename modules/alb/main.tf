@@ -15,6 +15,14 @@ resource "aws_security_group" "internal_alb" {
     cidr_blocks = [data.aws_vpc.this.cidr_block]
   }
 
+  ingress {
+    description = "API Gateway VPC Link HTTP listener"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.this.cidr_block]
+  }
+
   egress {
     description = "Allow ALB responses only within the VPC"
     from_port   = 0
