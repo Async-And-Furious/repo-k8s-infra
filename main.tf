@@ -367,6 +367,12 @@ resource "newrelic_nrql_alert_condition" "app_unavailable" {
   name                         = "App indisponível (${var.environment})"
   enabled                      = true
   violation_time_limit_seconds = 3600
+  # Sem isso, uma janela sem nenhuma transação (o cenário que essa
+  # condição existe pra detectar) não tem linha de resultado nenhuma, e o
+  # avaliador ignora a janela em vez de comparar "0 < 1" — a condição
+  # nunca abre violação por ausência total de sinal.
+  fill_option = "static"
+  fill_value  = 0
 
   nrql {
     query = "SELECT count(*) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
