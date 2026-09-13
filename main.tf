@@ -10,8 +10,15 @@ provider "aws" {
   }
 }
 
+provider "newrelic" {
+  account_id = var.new_relic_account_id
+  api_key    = var.new_relic_api_key
+  region     = "US"
+}
+
 locals {
   node_instance_types = coalesce(var.node_instance_types, ["t3.small"])
+  new_relic_app_name  = "async-furious-project-${var.environment}"
 }
 
 module "vpc" {
@@ -191,5 +198,157 @@ resource "helm_release" "newrelic_bundle" {
   set {
     name  = "nri-metadata-injection.enabled"
     value = "false"
+  }
+}
+
+# Operational dashboard (issue #166). One per environment, reusing data
+# already flowing from #163 (APM agent) and the nri-bundle above
+# (newrelic-infrastructure, newrelic-logging) — no new instrumentation.
+resource "newrelic_one_dashboard" "observability" {
+  name        = "tc3-observability-${var.environment}"
+  permissions = "public_read_only"
+
+  page {
+    name = "Aplicação"
+
+    widget_line {
+      title  = "Tempo de resposta médio"
+      row    = 1
+      column = 1
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(duration) FROM Transaction WHERE appName = '${local.new_relic_app_name}' TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Throughput (requisições/min)"
+      row    = 1
+      column = 5
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT rate(count(*), 1 minute) FROM Transaction WHERE appName = '${local.new_relic_app_name}' TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Taxa de erro (%)"
+      row    = 1
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT percentage(count(*), WHERE error IS true) FROM Transaction WHERE appName = '${local.new_relic_app_name}' TIMESERIES"
+      }
+    }
+
+    widget_billboard {
+      title  = "Apdex"
+      row    = 2
+      column = 1
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT apdex(duration) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
+      }
+    }
+
+    widget_table {
+      title  = "Top endpoints por tempo de resposta"
+      row    = 2
+      column = 5
+      width  = 8
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(duration) FROM Transaction WHERE appName = '${local.new_relic_app_name}' FACET name LIMIT 20"
+      }
+    }
+  }
+
+  page {
+    name = "Infraestrutura"
+
+    widget_line {
+      title  = "CPU por pod"
+      row    = 1
+      column = 1
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(cpuUsedCores) FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}' FACET podName TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Memória por pod"
+      row    = 1
+      column = 7
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(memoryWorkingSetBytes) FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}' FACET podName TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Contagem de pods / restarts"
+      row    = 2
+      column = 1
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(podName), sum(restartCount) FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}' TIMESERIES"
+      }
+    }
+
+    widget_billboard {
+      title  = "Nós do cluster"
+      row    = 2
+      column = 7
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(nodeName) FROM K8sNodeSample WHERE clusterName = '${module.eks.cluster_name}'"
+      }
+    }
+  }
+
+  page {
+    name = "Logs"
+
+    widget_line {
+      title  = "Volume de logs por nível"
+      row    = 1
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT count(*) FROM Log WHERE cluster_name = '${module.eks.cluster_name}' FACET level TIMESERIES"
+      }
+    }
+
+    widget_table {
+      title  = "Últimos erros"
+      row    = 2
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT message, correlationId, timestamp FROM Log WHERE cluster_name = '${module.eks.cluster_name}' AND level = 'error' SINCE 1 day ago LIMIT 50"
+      }
+    }
   }
 }

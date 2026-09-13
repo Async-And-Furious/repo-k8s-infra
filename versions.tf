@@ -11,6 +11,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.17"
     }
+    newrelic = {
+      source  = "newrelic/newrelic"
+      version = "~> 3.0"
+    }
   }
 
   # Partial configuration: bucket/key/region come from backend.hcl, which the
