@@ -1,5 +1,24 @@
 # Agent log
 
+## 2026-09-14 (private EKS CI runner)
+
+- Moved normal HML and production Terraform plan/apply jobs to the configured
+  `eks-private` runner so Terraform's Helm/Kubernetes providers use private EKS
+  API access.
+- Preserved hosted-runner endpoint discovery and temporary `/32` exposure only
+  for explicitly selected AWS Academy mode; Terraform and endpoint assertions
+  remain blocking while diagnostics stay best-effort.
+- No Terraform apply, production operation, or AWS resource change was
+  performed.
+
+## 2026-09-14 (best-effort post-deploy diagnostics)
+
+- Marked the New Relic and HML load balancer controller diagnostics as
+  best-effort so transient EKS connectivity or stale pod lookups cannot mask
+  Terraform apply, endpoint restoration, or endpoint assertion results.
+- No Terraform apply, production operation, or AWS resource change was
+  performed.
+
 ## 2026-09-06 (read-only HML EC2 capacity diagnostics)
 
 - Added a workflow-dispatch-only diagnostic workflow using the normal AWS
