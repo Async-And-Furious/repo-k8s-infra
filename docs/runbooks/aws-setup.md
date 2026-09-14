@@ -1,21 +1,23 @@
-# AWS setup prerequisites
+# Pré-requisitos de configuração da AWS
 
-This runbook previously carried a per-repository copy of the account-setup
-handoff. The four copies drifted apart and all of them described infrastructure
-that no longer exists (a GitHub OIDC provider and hand-created IAM role, a
-manually provisioned `tc3-terraform-state` bucket with a
-`tc3-terraform-locks` DynamoDB table, HCP Terraform workspaces and
-`TF_API_TOKEN`, and an `hml-apply` approval gate).
+Este runbook anteriormente mantinha uma cópia, por repositório, do handoff de
+configuração da conta. As quatro cópias divergiram entre si e todas descreviam
+infraestrutura que não existe mais (um provedor OIDC do GitHub e uma IAM role
+criada manualmente, um bucket `tc3-terraform-state` provisionado manualmente
+com uma tabela DynamoDB `tc3-terraform-locks`, workspaces do HCP Terraform e
+`TF_API_TOKEN`, e um gate de aprovação `hml-apply`).
 
-The canonical, current documents live in the workspace root:
+Os documentos canônicos e atuais vivem na raiz do workspace:
 
-- `HANDOFF-AWS-SETUP.md` — what a human sets up, per path (AWS Academy or a
-  real account with OIDC), and what the pipeline provisions for itself.
-- `AWS_HML_RUNBOOK.md` — the operator procedure, gates, and
-  `scripts/aws_lab.py` usage.
+- `HANDOFF-AWS-SETUP.md` — o que uma pessoa configura, por caminho (AWS
+  Academy ou uma conta real com OIDC), e o que o pipeline provisiona para si
+  mesmo.
+- `AWS_HML_RUNBOOK.md` — o procedimento operacional, os gates e o uso do
+  `scripts/aws_lab.py`.
 
-Short version for this repository: Terraform state is S3 at
-`tc3-tfstate-<account-id>` with S3 native locking, bootstrapped by
-`.github/scripts/bootstrap-backend.sh` inside the workflow. Nothing about the
-state backend is provisioned by hand. Credentials are the AWS Academy session
-values, rotated into repository-scoped secrets at the start of each lab session.
+Resumo para este repositório: o estado do Terraform fica no S3, no bucket
+`tc3-tfstate-<account-id>`, com locking nativo do S3, feito via bootstrap pelo
+`.github/scripts/bootstrap-backend.sh` dentro do workflow. Nada do backend de
+estado é provisionado manualmente. As credenciais são os valores da sessão do
+AWS Academy, rotacionados para secrets com escopo de repositório no início de
+cada sessão de laboratório.
