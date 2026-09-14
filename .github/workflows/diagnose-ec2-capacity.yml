@@ -1,0 +1,82 @@
+name: Diagnose HML EC2 capacity
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+
+jobs:
+  diagnose:
+    name: Read-only HML capacity diagnostics
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials with session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials without session token
+        if: env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.AWS_SESSION_TOKEN == ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Inspect AWS identity
+        run: aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output json
+
+      - name: List running and pending EC2 instances
+        run: |
+          aws ec2 describe-instances \
+            --region us-east-1 \
+            --filters 'Name=instance-state-name,Values=running,pending' \
+            --query 'Reservations[].Instances[].{InstanceId:InstanceId,InstanceType:InstanceType,State:State.Name,Name:join(``, Tags[?Key==`Name`].Value),KubernetesClusterTags:Tags[?contains(Key, `kubernetes.io/cluster/`)].{Key:Key,Value:Value}}' \
+            --output json
+
+      - name: List Auto Scaling group capacity
+        run: |
+          aws autoscaling describe-auto-scaling-groups \
+            --region us-east-1 \
+            --query 'AutoScalingGroups[].{AutoScalingGroupName:AutoScalingGroupName,DesiredCapacity:DesiredCapacity,MinSize:MinSize,MaxSize:MaxSize,InstancesInService:length(Instances[?LifecycleState==`InService`]),InstancesTotal:length(Instances)}' \
+            --output json
+
+      - name: List EKS clusters and nodegroups
+        shell: bash
+        run: |
+          set -euo pipefail
+          clusters="$(aws eks list-clusters --region us-east-1 --query 'clusters' --output json)"
+          printf '%s\n' '=== EKS clusters ==='
+          printf '%s\n' "$clusters"
+          printf '%s\n' '=== EKS nodegroups ==='
+          while IFS= read -r cluster; do
+            [[ -n "$cluster" ]] || continue
+            aws eks list-nodegroups --region us-east-1 --cluster-name "$cluster" \
+              --query "nodegroups[].{Cluster:\`$cluster\`,Nodegroup: @}" --output json
+          done < <(printf '%s' "$clusters" | jq -r '.[]')
+
+      - name: Read account and vCPU-related limits
+        shell: bash
+        run: |
+          set +e
+          printf '%s\n' '=== EC2 account attributes ==='
+          aws ec2 describe-account-attributes --region us-east-1 \
+            --attribute-names supported-platforms default-vpc max-instances --output json
+          printf '%s\n' '=== EC2 vCPU service quotas (when available) ==='
+          for quota_code in L-1216C47A L-34B43A08 L-7A658B7B; do
+            aws service-quotas get-service-quota --region us-east-1 \
+              --service-code ec2 --quota-code "$quota_code" \
+              --query 'Quota.{Code:QuotaCode,Name:QuotaName,Value:Value,Adjustable:Adjustable,GlobalQuota:GlobalQuota}' \
+              --output json || true
+          done

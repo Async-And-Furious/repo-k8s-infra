@@ -10,6 +10,17 @@ provider "aws" {
   }
 }
 
+provider "newrelic" {
+  account_id = var.new_relic_account_id
+  api_key    = var.new_relic_api_key
+  region     = "US"
+}
+
+locals {
+  node_instance_types = coalesce(var.node_instance_types, ["t3.small"])
+  new_relic_app_name  = "async-furious-project-${var.environment}"
+}
+
 module "vpc" {
   source = "./modules/vpc"
 
@@ -19,9 +30,14 @@ module "vpc" {
 module "eks" {
   source = "./modules/eks"
 
-  environment        = var.environment
-  vpc_id             = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnet_ids
+  environment         = var.environment
+  cluster_version     = var.cluster_version
+  node_instance_types = local.node_instance_types
+  node_desired_size   = var.node_desired_size
+  node_min_size       = var.node_min_size
+  node_max_size       = var.node_max_size
+  vpc_id              = module.vpc.vpc_id
+  private_subnet_ids  = module.vpc.private_subnet_ids
 
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
@@ -46,6 +62,17 @@ module "internal_alb" {
   environment        = var.environment
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnet_ids
+  health_check_path  = "/api/v1/health/live"
+}
+
+resource "aws_security_group_rule" "nodes_from_internal_alb" {
+  description              = "Allow the private ALB to reach EKS application pods"
+  type                     = "ingress"
+  from_port                = 3000
+  to_port                  = 3000
+  protocol                 = "tcp"
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = module.internal_alb.security_group_id
 }
 
 provider "helm" {
@@ -62,6 +89,8 @@ provider "helm" {
 }
 
 resource "helm_release" "aws_load_balancer_controller" {
+  depends_on = [module.eks]
+
   name             = "aws-load-balancer-controller"
   namespace        = "kube-system"
   create_namespace = false
@@ -71,9 +100,25 @@ resource "helm_release" "aws_load_balancer_controller" {
   # The chart owns the TargetGroupBinding CRD; keep it installed in both environments.
   skip_crds = false
 
+  # ponytail: one replica keeps control-plane add-ons within the small-node budget.
+  set {
+    name  = "replicaCount"
+    value = "1"
+  }
+
   set {
     name  = "clusterName"
     value = module.eks.cluster_name
+  }
+
+  set {
+    name  = "region"
+    value = var.aws_region
+  }
+
+  set {
+    name  = "vpcId"
+    value = module.vpc.vpc_id
   }
 
   set {
@@ -97,10 +142,360 @@ resource "helm_release" "aws_load_balancer_controller" {
 }
 
 resource "helm_release" "metrics_server" {
+  depends_on = [module.eks]
+
   name             = "metrics-server"
   namespace        = "kube-system"
   create_namespace = false
   repository       = "https://kubernetes-sigs.github.io/metrics-server/"
   chart            = "metrics-server"
   version          = "3.12.2"
+}
+
+# New Relic Kubernetes integration (issue #163). Minimal footprint on purpose:
+# only the infrastructure agent, log forwarding and kube-state-metrics are
+# enabled. nri-metadata-injection (a cluster-wide mutating admission webhook)
+# and nri-kube-events/newrelic-prometheus-agent/pixie are left disabled until
+# the basics are validated end-to-end and node capacity headroom is confirmed.
+resource "helm_release" "newrelic_bundle" {
+  name             = "newrelic-bundle"
+  namespace        = "newrelic"
+  create_namespace = true
+  repository       = "https://helm-charts.newrelic.com"
+  chart            = "nri-bundle"
+  version          = "8.0.24"
+
+  set {
+    name  = "global.cluster"
+    value = module.eks.cluster_name
+  }
+
+  set_sensitive {
+    name  = "global.licenseKey"
+    value = var.new_relic_license_key
+  }
+
+  set {
+    name  = "global.lowDataMode"
+    value = "true"
+  }
+
+  set {
+    name  = "newrelic-infrastructure.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "newrelic-logging.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "kube-state-metrics.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "nri-metadata-injection.enabled"
+    value = "false"
+  }
+}
+
+# Operational dashboard (issue #166). One per environment, reusing data
+# already flowing from #163 (APM agent) and the nri-bundle above
+# (newrelic-infrastructure, newrelic-logging) — no new instrumentation.
+resource "newrelic_one_dashboard" "observability" {
+  name        = "tc3-observability-${var.environment}"
+  permissions = "public_read_only"
+
+  page {
+    name = "Aplicação"
+
+    widget_line {
+      title  = "Tempo de resposta médio"
+      row    = 1
+      column = 1
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(duration) FROM Transaction WHERE appName = '${local.new_relic_app_name}' TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Throughput (requisições/min)"
+      row    = 1
+      column = 5
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT rate(count(*), 1 minute) FROM Transaction WHERE appName = '${local.new_relic_app_name}' TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Taxa de erro (%)"
+      row    = 1
+      column = 9
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction WHERE appName = '${local.new_relic_app_name}' TIMESERIES"
+      }
+    }
+
+    widget_billboard {
+      title  = "Apdex"
+      row    = 2
+      column = 1
+      width  = 4
+      height = 3
+
+      nrql_query {
+        query = "SELECT apdex(duration) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
+      }
+    }
+
+    widget_table {
+      title  = "Top endpoints por tempo de resposta"
+      row    = 2
+      column = 5
+      width  = 8
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(duration) FROM Transaction WHERE appName = '${local.new_relic_app_name}' FACET name LIMIT 20"
+      }
+    }
+  }
+
+  page {
+    name = "Infraestrutura"
+
+    widget_line {
+      title  = "CPU por pod"
+      row    = 1
+      column = 1
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(cpuUsedCores) FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}' FACET podName TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Memória por pod"
+      row    = 1
+      column = 7
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(memoryWorkingSetBytes) FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}' FACET podName TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Contagem de pods / restarts"
+      row    = 2
+      column = 1
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(podName), sum(restartCount) FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}' TIMESERIES"
+      }
+    }
+
+    widget_billboard {
+      title  = "Nós do cluster"
+      row    = 2
+      column = 7
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT uniqueCount(nodeName) FROM K8sNodeSample WHERE clusterName = '${module.eks.cluster_name}'"
+      }
+    }
+  }
+
+  page {
+    name = "Logs"
+
+    widget_line {
+      title  = "Volume de logs por nível"
+      row    = 1
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT count(*) FROM Log WHERE cluster_name = '${module.eks.cluster_name}' FACET level TIMESERIES"
+      }
+    }
+
+    widget_table {
+      title  = "Últimos erros"
+      row    = 2
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT message, correlationId, timestamp FROM Log WHERE cluster_name = '${module.eks.cluster_name}' AND level = 'error' SINCE 1 day ago LIMIT 50"
+      }
+    }
+  }
+}
+
+# Operational alerts (issue #167). Same account/data as #163/#166 — no new
+# instrumentation. One policy per environment with 5 conditions covering
+# app availability, error rate, node resource pressure and crash loops,
+# routed to a single email destination.
+resource "newrelic_alert_policy" "observability" {
+  name                = "tc3-observability-${var.environment}"
+  incident_preference = "PER_CONDITION_AND_TARGET"
+}
+
+resource "newrelic_nrql_alert_condition" "app_unavailable" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "App indisponível (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+  # Sem isso, uma janela sem nenhuma transação (o cenário que essa
+  # condição existe pra detectar) não tem linha de resultado nenhuma, e o
+  # avaliador ignora a janela em vez de comparar "0 < 1" — a condição
+  # nunca abre violação por ausência total de sinal.
+  fill_option = "static"
+  fill_value  = 0
+
+  nrql {
+    query = "SELECT count(*) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
+  }
+
+  critical {
+    operator              = "below"
+    threshold             = 1
+    threshold_duration    = 300
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "high_error_rate" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "Taxa de erro alta (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction WHERE appName = '${local.new_relic_app_name}'"
+  }
+
+  critical {
+    operator              = "above"
+    threshold             = 5
+    threshold_duration    = 300
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "high_cpu" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "CPU excessiva (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT average(cpuUsedCores/cpuLimitCores) * 100 FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}'"
+  }
+
+  critical {
+    operator              = "above"
+    threshold             = 80
+    threshold_duration    = 600
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "high_memory" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "Memória excessiva (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT average(memoryWorkingSetBytes/memoryLimitBytes) * 100 FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}'"
+  }
+
+  critical {
+    operator              = "above"
+    threshold             = 80
+    threshold_duration    = 600
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_nrql_alert_condition" "crash_loop" {
+  policy_id                    = newrelic_alert_policy.observability.id
+  name                         = "Pod em crash loop (${var.environment})"
+  enabled                      = true
+  violation_time_limit_seconds = 3600
+
+  nrql {
+    query = "SELECT sum(restartCount) FROM K8sContainerSample WHERE clusterName = '${module.eks.cluster_name}' FACET podName"
+  }
+
+  critical {
+    operator              = "above"
+    threshold             = 3
+    threshold_duration    = 600
+    threshold_occurrences = "ALL"
+  }
+}
+
+resource "newrelic_notification_destination" "email" {
+  name = "tc3-observability-email-${var.environment}"
+  type = "EMAIL"
+
+  property {
+    key   = "email"
+    value = var.new_relic_alert_email
+  }
+}
+
+resource "newrelic_notification_channel" "email" {
+  name           = "tc3-observability-email-${var.environment}"
+  type           = "EMAIL"
+  product        = "IINT"
+  destination_id = newrelic_notification_destination.email.id
+
+  property {
+    key   = "subject"
+    value = "[tc3-${var.environment}] {{issueTitle}}"
+  }
+}
+
+resource "newrelic_workflow" "observability" {
+  name                  = "tc3-observability-${var.environment}"
+  muting_rules_handling = "NOTIFY_ALL_ISSUES"
+
+  issues_filter {
+    name = "tc3-observability-${var.environment}-policy-filter"
+    type = "FILTER"
+
+    predicate {
+      attribute = "labels.policyIds"
+      operator  = "EXACTLY_MATCHES"
+      values    = [newrelic_alert_policy.observability.id]
+    }
+  }
+
+  destination {
+    channel_id = newrelic_notification_channel.email.id
+  }
 }

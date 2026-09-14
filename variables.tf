@@ -13,6 +13,71 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "cluster_version" {
+  description = "Optional EKS Kubernetes version; leave unset to preserve the version reported by an existing cluster"
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.cluster_version == null || can(regex("^1\\.[0-9]+$", var.cluster_version))
+    error_message = "cluster_version must be null or a Kubernetes major.minor version such as 1.30."
+  }
+}
+
+variable "node_instance_types" {
+  description = "Optional EC2 instance types for the managed node group; defaults to t3.small for enough pod capacity in HML and production"
+  type        = list(string)
+  default     = null
+
+  validation {
+    condition = var.node_instance_types == null || (
+      length(var.node_instance_types) > 0 &&
+      alltrue([for instance_type in var.node_instance_types : trimspace(instance_type) != ""])
+    )
+    error_message = "node_instance_types must be null or a non-empty list of instance types."
+  }
+}
+
+variable "node_desired_size" {
+  description = "Managed node group desired capacity for HML and production"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.node_desired_size >= 1 && var.node_desired_size == floor(var.node_desired_size)
+    error_message = "node_desired_size must be a positive whole number."
+  }
+}
+
+variable "node_min_size" {
+  description = "Managed node group minimum capacity for HML and production; raise after the initial scale-out"
+  type        = number
+  default     = 2
+
+  validation {
+    condition     = var.node_min_size >= 1 && var.node_min_size == floor(var.node_min_size)
+    error_message = "node_min_size must be a positive whole number."
+  }
+}
+
+variable "node_max_size" {
+  description = "Managed node group maximum capacity for HML and production"
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.node_max_size >= 1 && var.node_max_size == floor(var.node_max_size)
+    error_message = "node_max_size must be a positive whole number."
+  }
+}
+
+check "node_capacity_configuration" {
+  assert {
+    condition     = var.node_min_size <= var.node_desired_size && var.node_desired_size <= var.node_max_size
+    error_message = "Managed node capacity must satisfy min <= desired <= max."
+  }
+}
+
 variable "aws_academy" {
   description = "Use AWS Academy compatibility mode and the pre-existing LabRole"
   type        = bool
@@ -111,4 +176,26 @@ variable "load_balancer_controller_role_arn" {
     condition     = var.load_balancer_controller_role_arn == trimspace(var.load_balancer_controller_role_arn) && (var.load_balancer_controller_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.load_balancer_controller_role_arn)))
     error_message = "load_balancer_controller_role_arn must be empty or a valid partition-neutral IAM role ARN."
   }
+}
+
+variable "new_relic_license_key" {
+  description = "New Relic ingest license key for the Kubernetes infrastructure integration (nri-bundle)"
+  type        = string
+  sensitive   = true
+}
+
+variable "new_relic_account_id" {
+  description = "New Relic account ID that owns the dashboards managed for this environment (issue #166)"
+  type        = number
+}
+
+variable "new_relic_api_key" {
+  description = "New Relic User API key (NRAK-...) used by the newrelic Terraform provider to manage dashboards; distinct from new_relic_license_key (an ingest key, not usable here)"
+  type        = string
+  sensitive   = true
+}
+
+variable "new_relic_alert_email" {
+  description = "Email address notified by the operational alert policy (issue #167)"
+  type        = string
 }

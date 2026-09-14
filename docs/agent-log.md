@@ -1,5 +1,122 @@
 # Agent log
 
+## 2026-09-06 (read-only HML EC2 capacity diagnostics)
+
+- Added a workflow-dispatch-only diagnostic workflow using the normal AWS
+  credential configuration pattern to report EC2, Auto Scaling, EKS, account,
+  and vCPU quota information in `us-east-1` without changing resources.
+- No AWS apply, destroy, termination, or modification was performed.
+
+## 2026-09-04 (HML apply runner-specific Terraform plan)
+
+- Fixed HML apply to generate `terraform.auto.tfvars.json` from the apply
+  runner's current `/32`, create a fresh `tfplan` on that runner, and apply it
+  instead of using the plan-runner artifact. Production planning/apply behavior
+  was left unchanged.
+- Preserved temporary HML runner-only endpoint exposure and unconditional
+  restoration of the original settings, with a final read-only restoration
+  assertion. No AWS apply or workflow dispatch was performed.
+
+## 2026-09-04 (stage 1 managed node group replacement capacity)
+
+- Temporarily set the AL2023 `t3.micro` managed node group to
+  `min=2`, `desired=2`, and `max=2` so replacement can complete within the
+  account's 8-vCPU limit while two old nodes remain.
+- This is stage 1 only; after a successful apply, a follow-up must scale all
+  three values back to 3. No AWS apply was performed.
+
+## 2026-09-04 (managed node group instance type stability)
+
+- Reverted the managed node group default to the previously working single
+  `t3.micro` instance type. Avoiding an instance-type list prevents replacement
+  node groups and temporary node overlap from exceeding the account's vCPU
+  quota; the fixed `min=3`, `desired=3`, `max=3` capacity is unchanged.
+- Preserved AL2023, private networking, IAM, and security groups. No Terraform
+  apply, destructive command, or AWS operation was performed.
+
+## 2026-09-04 (managed node group capacity resilience)
+
+- Added `t3a.micro` alongside `t3.micro` in the EKS managed node group's
+  `instance_types` so EC2 can use either capacity type after NodeCreationFailure.
+- Preserved AL2023, fixed HML/production capacity at three nodes, private
+  subnets, IAM, and security groups. No Terraform apply or AWS operation was
+  performed.
+
+## 2026-09-04 (managed node group capacity)
+
+- Set the HML and production managed node group to a fixed three-node capacity
+  (`min=3`, `desired=3`, `max=3`) so migration Jobs have schedulable capacity
+  without introducing an autoscaling range; `t3.micro` and private networking
+  are unchanged.
+- No Terraform validate apply or AWS operation was performed.
+
+## 2026-09-04 (Load Balancer Controller replica capacity)
+
+- Set chart 1.8.2 `replicaCount` to one so the controller fits the configured
+  `t3.micro` node pod capacity, preserving readiness, webhook, IRSA, and network
+  settings. No AWS apply was performed.
+
+## 2026-09-04 (HML Load Balancer Controller startup)
+
+- Passed the AWS region and VPC ID to chart 1.8.2 and completed the controller
+  IAM policy with its directly required EC2 and ELB actions.
+- Preserved EKS readiness, IMDSv2, endpoint security, and HML/production paths;
+  no AWS apply was performed.
+
+## 2026-09-04 (HML EKS AMI and endpoint cleanup)
+
+- Selected the account-supported `AL2023_x86_64_STANDARD` managed-node AMI for
+  EKS 1.30 while preserving per-node-group AMI and version overrides.
+- HML plan/apply now corrects private endpoint access before Terraform and
+  restores endpoint settings in always cleanup, including newly created
+  clusters. No AWS apply or destroy was performed.
+
+## 2026-09-04 (idempotent production ECR cleanup)
+
+- Made target-environment ECR cleanup derive its repository name and treat a
+  missing repository as a successful no-op, while preserving existing image
+  cleanup, destroy guards, Terraform state, endpoint restoration, and scoped
+  permissions.
+- No Terraform destroy or AWS destructive operation was performed.
+
+## 2026-09-04 (explicit production destroy workflow)
+
+- Added workflow-dispatch-only HML/production destroy guards with exact
+  environment confirmations; production remains behind the protected
+  `production` Environment.
+- Production destroy now preserves the existing state/backend flow, restores
+  temporary EKS endpoint access, and empties only the target environment's ECR
+  repository. No destroy was executed.
+
+## 2026-09-03 (production apply endpoint configuration)
+
+- Made production Terraform desired endpoint settings match the temporary
+  runner-only public `/32` access during both plan and apply; production apply
+  re-plans on its runner so the CIDR cannot become stale between jobs.
+- Existing endpoint settings are still restored after production plan/apply,
+  including failures. No AWS apply or destroy was performed.
+
+## 2026-09-03 (production runner endpoint access)
+
+- Added production plan/apply runner /32 EKS endpoint access with captured-settings cleanup; cluster-not-found remains a no-op.
+- No AWS apply or destroy was performed.
+
+## 2026-09-04 (Free Tier node sizing)
+
+- Defaulted HML and production managed nodes to the AWS Free Tier-eligible
+  `t3.micro`, while retaining an explicit `node_instance_types` override.
+- Made Helm releases wait for the complete EKS module so they do not race a
+  failed or still-unreachable node group.
+- Kept subnet selection sourced from the VPC module; no manual subnet inputs,
+  AWS apply, or destroy was performed.
+
+## 2026-09-03 (EKS version drift)
+
+- Made the root EKS version optional so existing clusters are not planned toward
+  the module's historical 1.30 default, which could invoke an invalid rollback.
+- Intentional upgrades remain available through an explicit `cluster_version`.
+- No AWS apply or destroy was performed.
+
 ## 2026-08-31 (Trivy findings)
 
 - Restricted the internal ALB egress to the VPC CIDR, enabled invalid-header

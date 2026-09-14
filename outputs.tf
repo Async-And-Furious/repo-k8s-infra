@@ -86,3 +86,8 @@ output "internal_alb_target_group_arn" {
 output "application_backend_port" {
   value = module.internal_alb.backend_port
 }
+
+output "observability_dashboard_url" {
+  description = "New Relic dashboard URL for this environment (issue #166)"
+  value       = newrelic_one_dashboard.observability.permalink
+}

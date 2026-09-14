@@ -60,7 +60,13 @@ module "eks" {
 
   eks_managed_node_groups = {
     default = {
-      instance_types  = var.node_instance_types
+      instance_types = var.node_instance_types
+      # Keep HML on Spot; PROD uses two On-Demand nodes, staying below the
+      # account-level Standard vCPU quota while avoiding Spot capacity limits.
+      capacity_type = var.environment == "hml" ? "SPOT" : "ON_DEMAND"
+      # AL2023 is supported for the account's EKS 1.30 managed nodes. Values
+      # supplied on an individual node group still take precedence.
+      ami_type        = "AL2023_x86_64_STANDARD"
       desired_size    = var.node_desired_size
       min_size        = var.node_min_size
       max_size        = var.node_max_size
@@ -111,6 +117,7 @@ data "aws_iam_policy_document" "load_balancer_controller" {
       "ec2:DeleteSecurityGroup", "ec2:DescribeAccountAttributes", "ec2:DescribeAddresses",
       "ec2:DescribeInstances", "ec2:DescribeInternetGateways", "ec2:DescribeNetworkInterfaces",
       "ec2:DescribeSecurityGroups", "ec2:DescribeSubnets", "ec2:DescribeTags", "ec2:DescribeVpcs",
+      "ec2:DescribeAvailabilityZones", "ec2:DescribeCoipPools", "ec2:DescribeVpcPeeringConnections",
       "ec2:ModifyInstanceAttribute", "ec2:ModifyNetworkInterfaceAttribute", "ec2:RevokeSecurityGroupIngress",
       "elasticloadbalancing:AddListenerCertificates", "elasticloadbalancing:AddTags",
       "elasticloadbalancing:CreateListener", "elasticloadbalancing:CreateLoadBalancer",
@@ -118,11 +125,13 @@ data "aws_iam_policy_document" "load_balancer_controller" {
       "elasticloadbalancing:DeleteListener", "elasticloadbalancing:DeleteLoadBalancer",
       "elasticloadbalancing:DeleteRule", "elasticloadbalancing:DeleteTargetGroup",
       "elasticloadbalancing:DeregisterTargets", "elasticloadbalancing:DescribeListenerCertificates",
-      "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:DescribeLoadBalancers",
-      "elasticloadbalancing:DescribeRules", "elasticloadbalancing:DescribeSSLPolicies",
-      "elasticloadbalancing:DescribeTags", "elasticloadbalancing:DescribeTargetGroups",
+      "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:DescribeLoadBalancerAttributes",
+      "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeRules",
+      "elasticloadbalancing:DescribeSSLPolicies", "elasticloadbalancing:DescribeTags",
+      "elasticloadbalancing:DescribeTargetGroupAttributes", "elasticloadbalancing:DescribeTargetGroups",
       "elasticloadbalancing:DescribeTargetHealth", "elasticloadbalancing:ModifyListener",
-      "elasticloadbalancing:ModifyRule", "elasticloadbalancing:ModifyTargetGroup",
+      "elasticloadbalancing:ModifyLoadBalancerAttributes", "elasticloadbalancing:ModifyRule",
+      "elasticloadbalancing:ModifyTargetGroup",
       "elasticloadbalancing:ModifyTargetGroupAttributes", "elasticloadbalancing:RegisterTargets",
       "elasticloadbalancing:RemoveListenerCertificates", "elasticloadbalancing:RemoveTags",
       "elasticloadbalancing:SetIpAddressType", "elasticloadbalancing:SetSecurityGroups",
