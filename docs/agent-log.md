@@ -1,5 +1,17 @@
 # Log do agente
 
+## 2026-09-14 (runner de CI privado para o EKS)
+
+- Movidos os jobs normais de plan/apply do Terraform em HML e produção para o
+  runner configurado `eks-private`, para que os providers Helm/Kubernetes do
+  Terraform usem acesso privado à API do EKS.
+- Preservados a descoberta de endpoint do runner hospedado e a exposição
+  temporária de `/32` apenas para o modo AWS Academy explicitamente
+  selecionado; as asserções de Terraform e de endpoint continuam
+  bloqueantes, enquanto os diagnósticos permanecem best-effort.
+- Nenhum apply do Terraform, operação de produção ou mudança de recurso AWS
+  foi realizada.
+
 ## 2026-09-14 (diagnósticos best-effort pós-deploy)
 
 - Marcados os diagnósticos do New Relic e do controller de load balancer em
