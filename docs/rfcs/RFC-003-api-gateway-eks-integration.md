@@ -1,58 +1,62 @@
 # RFC-003 — API Gateway e integração com EKS
 
-- **Status**: Accepted
-- **Date**: 2026-07-29
-- **Source of truth**: this file, in `async-furious-project`. Copies exist in
-  `repo-auth-serverless` and `repo-k8s-infra` for local visibility — update
-  here first, then sync.
+- **Status**: Aceita
+- **Data**: 2026-07-29
+- **Fonte da verdade**: este arquivo, em `async-furious-project`. Cópias
+  existem em `repo-auth-serverless` e `repo-k8s-infra` para visibilidade
+  local — atualizar aqui primeiro, depois sincronizar.
 
-## Context
+## Contexto
 
-HANDOFF.md §6.2 left API Gateway ownership open, and §4.2 suggested (without
-deciding) a VPC Link + internal load balancer integration between the
-Gateway and the EKS-hosted application. Both needed a decision before
-`repo-k8s-infra`'s apply pipeline or `repo-auth-serverless`'s Gateway
-resources could be implemented for real.
+Antes desta decisão, a ownership do API Gateway estava em aberto, e uma
+integração via VPC Link + load balancer interno entre o Gateway e a
+aplicação hospedada no EKS havia sido sugerida sem ser decidida (referência
+histórica a um documento de planejamento — HANDOFF.md — não encontrado nos
+repositórios da organização). Ambos precisavam de uma decisão antes que a
+pipeline de apply do `repo-k8s-infra` ou os recursos de Gateway do
+`repo-auth-serverless` pudessem ser implementados de fato.
 
-## Decision
+## Decisão
 
-1. **Ownership**: `repo-auth-serverless` owns the API Gateway resource,
-   routes (`/auth`, protected routes), and the Lambda Authorizer
-   association. `repo-k8s-infra` owns only the private integration target
-   (internal ALB) and exposes its ARN/DNS name as a Terraform output for
-   `repo-auth-serverless` to consume.
-2. **Integration**: HTTP API (not REST API) with a VPC Link to an internal
-   Application Load Balancer in the EKS VPC, using `HTTP_PROXY` integration.
+1. **Ownership**: o `repo-auth-serverless` é dono do recurso de API
+   Gateway, das rotas (`/auth`, rotas protegidas) e da associação com o
+   Lambda Authorizer. O `repo-k8s-infra` é dono apenas do alvo de
+   integração privado (ALB interno) e expõe seu ARN/DNS name como output
+   Terraform para o `repo-auth-serverless` consumir.
+2. **Integração**: HTTP API (não REST API) com um VPC Link para um
+   Application Load Balancer interno na VPC do EKS, usando integração
+   `HTTP_PROXY`.
 
-## Rationale
+## Justificativa
 
-- The Gateway's only responsibilities (`/auth` routes, authorizer wiring)
-  live in `repo-auth-serverless` already — co-locating ownership avoids a
-  cross-repo dependency for changes that only ever touch that repo.
-- HTTP API + VPC Link + ALB is cheaper and simpler than REST API + NLB, and
-  neither WAF-at-gateway nor usage plans nor request/response
-  transformation are current requirements.
-- The application is planned to evolve from monolith to microservices.
-  ALB (managed by the AWS Load Balancer Controller via Kubernetes Ingress)
-  supports adding path/host-based routing rules per-service without
-  touching the Gateway or VPC Link. An NLB (the alternative under REST API)
-  is L4-only and would need new target-group wiring per new microservice —
-  this decision was made specifically to avoid that redo later.
+- As únicas responsabilidades do Gateway (rotas `/auth`, ligação do
+  authorizer) já vivem no `repo-auth-serverless` — colocar a ownership no
+  mesmo lugar evita uma dependência cross-repo para mudanças que só afetam
+  aquele repositório.
+- HTTP API + VPC Link + ALB é mais barato e mais simples do que REST API +
+  NLB, e nem WAF no gateway, nem usage plans, nem transformação de
+  request/response são requisitos atuais.
+- A aplicação está planejada para evoluir de monólito para microsserviços.
+  O ALB (gerenciado pelo AWS Load Balancer Controller via Kubernetes
+  Ingress) suporta adicionar regras de roteamento por path/host por
+  serviço sem tocar no Gateway ou no VPC Link. Um NLB (a alternativa sob
+  REST API) é apenas L4 e exigiria nova configuração de target-group a
+  cada novo microsserviço — esta decisão foi tomada especificamente para
+  evitar esse retrabalho mais adiante.
 
-## Consequences
+## Consequências
 
-- `repo-k8s-infra` provisions the internal ALB, HTTP listener, and empty IP
-  target group and outputs their DNS name/ARN. The application deployment
-  registers pod IPs in that target group; this keeps ALB ownership in
-  infrastructure without requiring the controller during AWS Academy runs.
-- `repo-auth-serverless` must provision the HTTP API, routes, VPC Link, and
-  Lambda Authorizer, consuming the ALB output from `repo-k8s-infra`.
-- Future microservice split: add Kubernetes Ingress rules + Gateway routes
-  incrementally, no re-architecture of this integration.
+- O `repo-k8s-infra` precisa provisionar um ALB interno (via AWS Load
+  Balancer Controller / Ingress) e expor seu DNS name/ARN como output.
+- O `repo-auth-serverless` precisa provisionar a HTTP API, as rotas, o VPC
+  Link e o Lambda Authorizer, consumindo o output do ALB vindo do
+  `repo-k8s-infra`.
+- Divisão futura em microsserviços: adicionar regras de Kubernetes Ingress
+  + rotas de Gateway incrementalmente, sem rearquitetar esta integração.
 
-## Security exception
+## Exceção de segurança
 
-The private ALB intentionally retains its HTTP listener because it is the
-approved target of the API Gateway VPC Link. AWS-0054 is ignored only for that
-listener; this repository has no ACM certificate or domain contract to support
-an HTTPS listener without changing the integration.
+O ALB privado mantém intencionalmente seu listener HTTP porque é o alvo
+aprovado do VPC Link do API Gateway. A regra AWS-0054 é ignorada apenas
+para esse listener; este repositório não tem certificado ACM nem contrato
+de domínio que suporte um listener HTTPS sem mudar a integração.

@@ -1,287 +1,327 @@
-# Agent log
+# Log do agente
 
-## 2026-09-14 (private EKS CI runner)
+## 2026-09-14 (runner de CI privado para o EKS)
 
-- Moved normal HML and production Terraform plan/apply jobs to the configured
-  `eks-private` runner so Terraform's Helm/Kubernetes providers use private EKS
-  API access.
-- Preserved hosted-runner endpoint discovery and temporary `/32` exposure only
-  for explicitly selected AWS Academy mode; Terraform and endpoint assertions
-  remain blocking while diagnostics stay best-effort.
-- No Terraform apply, production operation, or AWS resource change was
-  performed.
+- Movidos os jobs normais de plan/apply do Terraform em HML e produção para o
+  runner configurado `eks-private`, para que os providers Helm/Kubernetes do
+  Terraform usem acesso privado à API do EKS.
+- Preservados a descoberta de endpoint do runner hospedado e a exposição
+  temporária de `/32` apenas para o modo AWS Academy explicitamente
+  selecionado; as asserções de Terraform e de endpoint continuam
+  bloqueantes, enquanto os diagnósticos permanecem best-effort.
+- Nenhum apply do Terraform, operação de produção ou mudança de recurso AWS
+  foi realizada.
 
-## 2026-09-14 (best-effort post-deploy diagnostics)
+## 2026-09-14 (diagnósticos best-effort pós-deploy)
 
-- Marked the New Relic and HML load balancer controller diagnostics as
-  best-effort so transient EKS connectivity or stale pod lookups cannot mask
-  Terraform apply, endpoint restoration, or endpoint assertion results.
-- No Terraform apply, production operation, or AWS resource change was
-  performed.
+- Marcados os diagnósticos do New Relic e do controller de load balancer em
+  HML como best-effort, para que problemas transitórios de conectividade no
+  EKS ou buscas de pod desatualizadas não possam mascarar os resultados de
+  apply do Terraform, restauração de endpoint ou asserção de endpoint.
+- Nenhum apply do Terraform, operação de produção ou mudança de recurso AWS
+  foi realizada.
 
-## 2026-09-06 (read-only HML EC2 capacity diagnostics)
+## 2026-09-06 (diagnósticos read-only de capacidade EC2 em HML)
 
-- Added a workflow-dispatch-only diagnostic workflow using the normal AWS
-  credential configuration pattern to report EC2, Auto Scaling, EKS, account,
-  and vCPU quota information in `us-east-1` without changing resources.
-- No AWS apply, destroy, termination, or modification was performed.
+- Adicionado um workflow disparado apenas manualmente (workflow-dispatch) que
+  usa o padrão normal de configuração de credenciais AWS para reportar
+  informações de EC2, Auto Scaling, EKS, conta e quota de vCPU em `us-east-1`,
+  sem alterar recursos.
+- Nenhum apply, destroy, terminação ou modificação na AWS foi realizada.
 
-## 2026-09-04 (HML apply runner-specific Terraform plan)
+## 2026-09-04 (plano do Terraform específico do runner de apply em HML)
 
-- Fixed HML apply to generate `terraform.auto.tfvars.json` from the apply
-  runner's current `/32`, create a fresh `tfplan` on that runner, and apply it
-  instead of using the plan-runner artifact. Production planning/apply behavior
-  was left unchanged.
-- Preserved temporary HML runner-only endpoint exposure and unconditional
-  restoration of the original settings, with a final read-only restoration
-  assertion. No AWS apply or workflow dispatch was performed.
+- Corrigido o apply em HML para gerar `terraform.auto.tfvars.json` a partir do
+  `/32` atual do runner de apply, criar um `tfplan` novo nesse mesmo runner e
+  aplicá-lo, em vez de usar o artefato de plano do runner de plan. O
+  comportamento de planejamento/apply de produção foi mantido inalterado.
+- Mantida a exposição temporária de endpoint restrita ao runner de HML e a
+  restauração incondicional das configurações originais, com uma asserção
+  final read-only de restauração. Nenhum apply do Terraform ou disparo de
+  workflow foi realizado.
 
-## 2026-09-04 (stage 1 managed node group replacement capacity)
+## 2026-09-04 (capacidade de substituição do node group gerenciado, etapa 1)
 
-- Temporarily set the AL2023 `t3.micro` managed node group to
-  `min=2`, `desired=2`, and `max=2` so replacement can complete within the
-  account's 8-vCPU limit while two old nodes remain.
-- This is stage 1 only; after a successful apply, a follow-up must scale all
-  three values back to 3. No AWS apply was performed.
+- Definido temporariamente o node group gerenciado AL2023 `t3.micro` para
+  `min=2`, `desired=2` e `max=2`, para que a substituição possa ser concluída
+  dentro do limite de 8 vCPUs da conta enquanto os dois nós antigos
+  permanecem.
+- Esta é apenas a etapa 1; após um apply bem-sucedido, um follow-up deve
+  reverter os três valores de volta para 3. Nenhum apply na AWS foi realizado.
 
-## 2026-09-04 (managed node group instance type stability)
+## 2026-09-04 (estabilidade do tipo de instância do node group gerenciado)
 
-- Reverted the managed node group default to the previously working single
-  `t3.micro` instance type. Avoiding an instance-type list prevents replacement
-  node groups and temporary node overlap from exceeding the account's vCPU
-  quota; the fixed `min=3`, `desired=3`, `max=3` capacity is unchanged.
-- Preserved AL2023, private networking, IAM, and security groups. No Terraform
-  apply, destructive command, or AWS operation was performed.
+- Revertido o padrão do node group gerenciado para o único tipo de instância
+  `t3.micro` que já funcionava anteriormente. Evitar uma lista de tipos de
+  instância impede que node groups de substituição e a sobreposição
+  temporária de nós excedam a quota de vCPU da conta; a capacidade fixa
+  `min=3`, `desired=3`, `max=3` permanece inalterada.
+- Preservados AL2023, rede privada, IAM e security groups. Nenhum apply do
+  Terraform, comando destrutivo ou operação na AWS foi realizado.
 
-## 2026-09-04 (managed node group capacity resilience)
+## 2026-09-04 (resiliência de capacidade do node group gerenciado)
 
-- Added `t3a.micro` alongside `t3.micro` in the EKS managed node group's
-  `instance_types` so EC2 can use either capacity type after NodeCreationFailure.
-- Preserved AL2023, fixed HML/production capacity at three nodes, private
-  subnets, IAM, and security groups. No Terraform apply or AWS operation was
-  performed.
+- Adicionado `t3a.micro` junto com `t3.micro` no `instance_types` do node
+  group gerenciado do EKS, para que o EC2 possa usar qualquer um dos dois
+  tipos de capacidade após um NodeCreationFailure.
+- Preservados AL2023, capacidade fixa de três nós em HML/produção, subnets
+  privadas, IAM e security groups. Nenhum apply do Terraform ou operação na
+  AWS foi realizada.
 
-## 2026-09-04 (managed node group capacity)
+## 2026-09-04 (capacidade do node group gerenciado)
 
-- Set the HML and production managed node group to a fixed three-node capacity
-  (`min=3`, `desired=3`, `max=3`) so migration Jobs have schedulable capacity
-  without introducing an autoscaling range; `t3.micro` and private networking
-  are unchanged.
-- No Terraform validate apply or AWS operation was performed.
+- Definida para HML e produção uma capacidade fixa de três nós no node group
+  gerenciado (`min=3`, `desired=3`, `max=3`), para que os Jobs de migração
+  tenham capacidade agendável sem introduzir um intervalo de auto scaling;
+  `t3.micro` e a rede privada permanecem inalterados.
+- Nenhum validate, apply do Terraform ou operação na AWS foi realizada.
 
-## 2026-09-04 (Load Balancer Controller replica capacity)
+## 2026-09-04 (capacidade de réplicas do Load Balancer Controller)
 
-- Set chart 1.8.2 `replicaCount` to one so the controller fits the configured
-  `t3.micro` node pod capacity, preserving readiness, webhook, IRSA, and network
-  settings. No AWS apply was performed.
+- Definido `replicaCount` igual a um no chart 1.8.2, para que o controller
+  caiba na capacidade de pods do node `t3.micro` configurado, preservando
+  readiness, webhook, IRSA e configurações de rede. Nenhum apply na AWS foi
+  realizado.
 
-## 2026-09-04 (HML Load Balancer Controller startup)
+## 2026-09-04 (inicialização do Load Balancer Controller em HML)
 
-- Passed the AWS region and VPC ID to chart 1.8.2 and completed the controller
-  IAM policy with its directly required EC2 and ELB actions.
-- Preserved EKS readiness, IMDSv2, endpoint security, and HML/production paths;
-  no AWS apply was performed.
+- Passados a região AWS e o VPC ID para o chart 1.8.2 e completada a política
+  IAM do controller com as ações de EC2 e ELB diretamente necessárias.
+- Preservados a prontidão do EKS, IMDSv2, segurança de endpoint e os caminhos
+  de HML/produção; nenhum apply na AWS foi realizado.
 
-## 2026-09-04 (HML EKS AMI and endpoint cleanup)
+## 2026-09-04 (AMI do EKS e limpeza de endpoint em HML)
 
-- Selected the account-supported `AL2023_x86_64_STANDARD` managed-node AMI for
-  EKS 1.30 while preserving per-node-group AMI and version overrides.
-- HML plan/apply now corrects private endpoint access before Terraform and
-  restores endpoint settings in always cleanup, including newly created
-  clusters. No AWS apply or destroy was performed.
+- Selecionada a AMI de node gerenciado `AL2023_x86_64_STANDARD`, suportada
+  pela conta, para o EKS 1.30, preservando as sobrescritas de AMI e versão por
+  node group.
+- O plan/apply de HML agora corrige o acesso ao endpoint privado antes do
+  Terraform e restaura as configurações de endpoint sempre na limpeza final,
+  inclusive para clusters recém-criados. Nenhum apply ou destroy na AWS foi
+  realizado.
 
-## 2026-09-04 (idempotent production ECR cleanup)
+## 2026-09-04 (limpeza idempotente do ECR de produção)
 
-- Made target-environment ECR cleanup derive its repository name and treat a
-  missing repository as a successful no-op, while preserving existing image
-  cleanup, destroy guards, Terraform state, endpoint restoration, and scoped
-  permissions.
-- No Terraform destroy or AWS destructive operation was performed.
+- A limpeza do ECR do ambiente-alvo agora deriva o nome do repositório e trata
+  um repositório inexistente como um no-op bem-sucedido, preservando a
+  limpeza de imagens existente, os guards de destroy, o estado do Terraform e
+  as permissões com escopo restrito.
+- Nenhum destroy do Terraform ou operação destrutiva na AWS foi realizada.
 
-## 2026-09-04 (explicit production destroy workflow)
+## 2026-09-04 (workflow explícito de destroy de produção)
 
-- Added workflow-dispatch-only HML/production destroy guards with exact
-  environment confirmations; production remains behind the protected
-  `production` Environment.
-- Production destroy now preserves the existing state/backend flow, restores
-  temporary EKS endpoint access, and empties only the target environment's ECR
-  repository. No destroy was executed.
+- Adicionados guards de destroy de HML/produção disparados apenas manualmente,
+  com confirmações exatas por ambiente; produção permanece atrás do
+  Environment protegido `production`.
+- O destroy de produção agora preserva o fluxo existente de estado/backend,
+  restaura o acesso temporário ao endpoint do EKS e esvazia apenas o
+  repositório ECR do ambiente-alvo. Nenhum destroy foi executado.
 
-## 2026-09-03 (production apply endpoint configuration)
+## 2026-09-03 (configuração de endpoint no apply de produção)
 
-- Made production Terraform desired endpoint settings match the temporary
-  runner-only public `/32` access during both plan and apply; production apply
-  re-plans on its runner so the CIDR cannot become stale between jobs.
-- Existing endpoint settings are still restored after production plan/apply,
-  including failures. No AWS apply or destroy was performed.
+- As configurações de endpoint desejadas do Terraform em produção agora
+  correspondem ao acesso público temporário `/32` do runner tanto no plan
+  quanto no apply; o apply de produção reexecuta o plan no seu próprio runner
+  para que o CIDR não fique desatualizado entre jobs.
+- As configurações de endpoint existentes continuam sendo restauradas após o
+  plan/apply de produção, inclusive em caso de falha. Nenhum apply ou destroy
+  na AWS foi realizado.
 
-## 2026-09-03 (production runner endpoint access)
+## 2026-09-03 (acesso ao endpoint pelo runner de produção)
 
-- Added production plan/apply runner /32 EKS endpoint access with captured-settings cleanup; cluster-not-found remains a no-op.
-- No AWS apply or destroy was performed.
+- Adicionado acesso `/32` do runner de plan/apply de produção ao endpoint do
+  EKS, com limpeza das configurações capturadas; cluster inexistente
+  permanece como no-op.
+- Nenhum apply ou destroy na AWS foi realizado.
 
-## 2026-09-04 (Free Tier node sizing)
+## 2026-09-04 (dimensionamento de nós no Free Tier)
 
-- Defaulted HML and production managed nodes to the AWS Free Tier-eligible
-  `t3.micro`, while retaining an explicit `node_instance_types` override.
-- Made Helm releases wait for the complete EKS module so they do not race a
-  failed or still-unreachable node group.
-- Kept subnet selection sourced from the VPC module; no manual subnet inputs,
-  AWS apply, or destroy was performed.
+- Definido como padrão para os nós gerenciados de HML e produção o tipo
+  `t3.micro`, elegível ao AWS Free Tier, mantendo uma sobrescrita explícita
+  via `node_instance_types`.
+- Os releases do Helm agora esperam o módulo completo do EKS, para não entrar
+  em disputa com um node group que falhou ou ainda está inacessível.
+- Mantida a seleção de subnets a partir do módulo de VPC; nenhum input manual
+  de subnet, apply ou destroy na AWS foi realizado.
 
-## 2026-09-03 (EKS version drift)
+## 2026-09-03 (deriva de versão do EKS)
 
-- Made the root EKS version optional so existing clusters are not planned toward
-  the module's historical 1.30 default, which could invoke an invalid rollback.
-- Intentional upgrades remain available through an explicit `cluster_version`.
-- No AWS apply or destroy was performed.
+- Tornada opcional a versão raiz do EKS, para que clusters existentes não
+  sejam planejados em direção ao padrão histórico 1.30 do módulo, o que
+  poderia invocar um rollback inválido.
+- Upgrades intencionais permanecem disponíveis através de um
+  `cluster_version` explícito.
+- Nenhum apply ou destroy na AWS foi realizado.
 
-## 2026-08-31 (Trivy findings)
+## 2026-08-31 (achados do Trivy)
 
-- Restricted the internal ALB egress to the VPC CIDR, enabled invalid-header
-  dropping, and enabled EKS controller manager and scheduler control-plane logs.
-- Kept the approved private HTTP VPC Link listener and documented its narrowly
-  scoped AWS-0054 exception; ECR remains on AWS-managed encryption because a
-  customer KMS design is not supported by the Academy contract.
-- No Terraform apply, commit, or push was performed.
+- Restringido o egress do ALB interno ao CIDR da VPC, habilitado o descarte de
+  cabeçalhos inválidos e habilitados os logs de control plane do controller
+  manager e do scheduler do EKS.
+- Mantido o listener HTTP do VPC Link privado já aprovado e documentada sua
+  exceção estritamente restrita ao AWS-0054; o ECR permanece com a
+  criptografia gerenciada pela AWS, pois um design com KMS de cliente não é
+  suportado pelo contrato da conta Academy.
+- Nenhum apply do Terraform, commit ou push foi realizado.
 
-## 2026-08-30 (TargetGroupBinding integration)
+## 2026-08-30 (integração do TargetGroupBinding)
 
-- Kept the AWS Load Balancer Controller enabled for HML and production and
-  explicitly retained Helm CRD installation so TargetGroupBinding is available.
-- Academy mode uses the existing node LabRole rather than an IRSA annotation;
-  normal mode continues to use the configured/controller IRSA role.
-- Added an explicit internal target-group output and documented the exact
-  TargetGroupBinding, Service, port, and listener contract.
-- No AWS apply or destroy was performed.
+- Mantido o AWS Load Balancer Controller habilitado para HML e produção e
+  explicitamente mantida a instalação de CRDs via Helm, para que o
+  TargetGroupBinding fique disponível.
+- O modo Academy usa a LabRole existente do node em vez de uma anotação IRSA;
+  o modo normal continua usando a role IRSA configurada/do controller.
+- Adicionado um output explícito de target group interno e documentado o
+  contrato exato de TargetGroupBinding, Service, porta e listener.
+- Nenhum apply ou destroy na AWS foi realizado.
 
-## 2026-08-30 (confirmed delivery target)
+## 2026-08-30 (alvo de entrega confirmado)
 
-- Allowed the same temporary AWS Academy credential set for HML and production;
-  production applies remain behind the protected `production` Environment and
-  explicit confirmation.
-- Added an environment-scoped internal ALB, listener, IP target group, and
-  outputs for the Auth/API Gateway and application contracts.
-- Made Academy endpoint exposure temporary for existing and new clusters and
-  restore the captured private/public/CIDR settings after every plan/apply path.
-- No AWS apply or destroy was performed.
+- Permitido o uso do mesmo conjunto de credenciais temporárias do AWS Academy
+  para HML e produção; os applies de produção permanecem atrás do Environment
+  protegido `production` e de confirmação explícita.
+- Adicionados um ALB interno com escopo por ambiente, listener, target group
+  de IP e outputs para os contratos do Auth/API Gateway e da aplicação.
+- Tornada temporária a exposição de endpoint em modo Academy para clusters
+  existentes e novos, restaurando as configurações capturadas de
+  privado/público/CIDR após cada caminho de plan/apply.
+- Nenhum apply ou destroy na AWS foi realizado.
 
-## 2026-08-29 (Release path hardening)
+## 2026-08-29 (fortalecimento do caminho de release)
 
-- Added automatic HML apply on `develop`, protected `production` environment
-  gating, saved Terraform plan artifacts, and read-only AWS/state preflight.
-- Academy mode remains LabRole-compatible for HML and is explicitly rejected
-  for production; no apply or destroy was performed.
-- Published stable ECR repository name output and clarified the existing
-  VPC/EKS/OIDC/ECR output contract.
+- Adicionados apply automático em HML no `develop`, gate do Environment
+  protegido `production`, artefatos de plano do Terraform salvos e
+  verificação prévia read-only de AWS/estado.
+- O modo Academy permanece compatível com LabRole para HML e é explicitamente
+  rejeitado para produção; nenhum apply ou destroy foi realizado.
+- Publicado o output estável do nome do repositório ECR e esclarecido o
+  contrato de outputs existente de VPC/EKS/OIDC/ECR.
 
-## 2026-08-26 (Direct apply workflow)
+## 2026-08-26 (workflow de apply direto)
 
-- Terraform apply now runs directly after validation; the plan job remains
-  limited to explicit plan dispatches.
-- Preserved generated auto tfvars, HCP remote state initialization, Academy
-  guardrails, environment approvals, and Terraform state locking.
-- Terraform apply was not performed.
+- O apply do Terraform agora roda diretamente após a validação; o job de plan
+  permanece limitado a disparos explícitos de plan.
+- Preservados os tfvars automáticos gerados, a inicialização do estado remoto
+  no HCP, os guardrails do Academy, as aprovações de ambiente e o locking de
+  estado do Terraform.
+- O apply do Terraform não foi executado.
 
-## 2026-08-24 (Terraform remote backend local execution)
+## 2026-08-24 (execução local do backend remoto do Terraform)
 
-- Switched manual plan/apply to generated local auto tfvars, removing remote
-  backend-incompatible CLI variables and plan artifact transfer.
-- Preserved Academy public endpoint CIDR validation and normal-mode behavior.
-- No Terraform apply was performed.
+- Alterado o plan/apply manual para usar tfvars automáticos locais gerados,
+  removendo variáveis de CLI incompatíveis com o backend remoto e a
+  transferência de artefato de plano.
+- Preservados a validação de CIDR de endpoint público do Academy e o
+  comportamento do modo normal.
+- Nenhum apply do Terraform foi realizado.
 
-## 2026-08-24 (HML remote backend initialization)
+## 2026-08-24 (inicialização do backend remoto em HML)
 
-- Configured the root remote backend for the `tc3-k8s-hml` HCP Terraform
-  workspace and removed invalid remote backend CLI overrides from plan/apply.
-- Preserved Academy credential, runner, CIDR, LabRole, and IAM behavior.
-- No Terraform apply was performed.
+- Configurado o backend remoto raiz para o workspace `tc3-k8s-hml` do HCP
+  Terraform e removidas sobrescritas inválidas de CLI de backend remoto do
+  plan/apply.
+- Preservados o comportamento de credenciais Academy, runner, CIDR, LabRole e
+  IAM.
+- Nenhum apply do Terraform foi realizado.
 
-## 2026-08-24 (HCP Terraform state)
+## 2026-08-24 (estado no HCP Terraform)
 
-- Replaced the S3 backend with HCP Terraform's remote state backend using local
-  execution and environment-specific `tc3-k8s-*` workspaces.
-- Updated CI and runbooks to use `TF_API_TOKEN`; AWS credentials remain in
-  GitHub and Academy hosted-runner/CIDR/LabRole behavior is unchanged.
-- No Terraform apply, commit, or push was performed.
+- Substituído o backend S3 pelo backend de estado remoto do HCP Terraform,
+  usando execução local e workspaces `tc3-k8s-*` específicos por ambiente.
+- Atualizados CI e runbooks para usar `TF_API_TOKEN`; as credenciais AWS
+  permanecem no GitHub e o comportamento de runner hospedado/CIDR/LabRole do
+  Academy permanece inalterado.
+- Nenhum apply do Terraform, commit ou push foi realizado.
 
 ## 2026-08-13
 
-- Replaced nested Terraform backend blocks with root-consumable HML and PROD backend configuration files while preserving state settings.
-- Parameterized manual plan/apply CI by environment, scoped OIDC permissions, preserved plan artifacts for apply, and serialized state operations per environment.
-- Updated repository usage and CI documentation.
-- No Terraform apply, commit, push, or AWS contact was performed.
+- Substituídos os blocos de backend aninhados do Terraform por arquivos de
+  configuração de backend de HML e PROD consumíveis pela raiz, preservando as
+  configurações de estado.
+- Parametrizado o CI de plan/apply manual por ambiente, com escopo restrito de
+  permissões OIDC, preservação de artefatos de plano para o apply e
+  serialização de operações de estado por ambiente.
+- Atualizada a documentação de uso do repositório e de CI.
+- Nenhum apply do Terraform, commit, push ou contato com a AWS foi realizado.
 
 ## 2026-08-15
 
-- Added pinned Helm bootstrap releases for AWS Load Balancer Controller and
-  Metrics Server, using the controller IRSA role.
-- Made the EKS API endpoint private by default, with opt-in CIDR-restricted
-  public access variables.
-- No Terraform apply or remote initialization was performed.
+- Adicionados releases Helm de bootstrap fixados por versão para o AWS Load
+  Balancer Controller e o Metrics Server, usando a role IRSA do controller.
+- Tornado o endpoint da API do EKS privado por padrão, com variáveis opcionais
+  de acesso público restrito por CIDR.
+- Nenhum apply do Terraform ou inicialização remota foi realizada.
 
 ## 2026-08-16
 
-- Added optional EKS cluster and managed node group role ARN inputs for AWS
-  Academy/Lab role reuse while preserving Terraform-created role defaults.
-- Documented `TF_VAR_eks_cluster_role_arn`, `TF_VAR_eks_node_role_arn`, and Lab
-  role ARN discovery.
-- No Terraform apply or remote initialization was performed.
+- Adicionados inputs opcionais de ARN de role para o cluster EKS e para o node
+  group gerenciado, permitindo o reuso de roles do AWS Academy/Lab e
+  preservando os padrões de roles criadas pelo Terraform.
+- Documentados `TF_VAR_eks_cluster_role_arn`, `TF_VAR_eks_node_role_arn` e a
+  descoberta do ARN da Lab role.
+- Nenhum apply do Terraform ou inicialização remota foi realizada.
 
-## 2026-08-16 (Load Balancer Controller role reuse)
+## 2026-08-16 (reuso de role do Load Balancer Controller)
 
-- Added optional root/module Load Balancer Controller role ARN inputs, preserving
-  Terraform role creation when empty.
-- Wired the GitHub `LOAD_BALANCER_CONTROLLER_ROLE_ARN` variable into the
-  canonical lowercase `TF_VAR_load_balancer_controller_role_arn` name and
-  documented `gh variable set`.
-- No Terraform apply or AWS contact was performed.
+- Adicionados inputs opcionais de ARN de role do Load Balancer Controller na
+  raiz/módulo, preservando a criação de role pelo Terraform quando vazios.
+- Conectada a variável `LOAD_BALANCER_CONTROLLER_ROLE_ARN` do GitHub ao nome
+  canônico em minúsculas `TF_VAR_load_balancer_controller_role_arn` e
+  documentado o uso de `gh variable set`.
+- Nenhum apply do Terraform ou contato com a AWS foi realizado.
 
-## 2026-08-22 (bounded deep-review guardrails)
+## 2026-08-22 (guardrails de revisão profunda limitada)
 
-- Removed duplicate/mismatched Terraform role environment entries and made AWS
-  credential selection depend on job environment values; artifact download now
-  has explicit `actions: read` permission.
-- Added validation for public EKS endpoint CIDRs and optional partition-neutral
-  IAM role ARNs. The Load Balancer Controller policy and existing null role
-  output contract were intentionally left unchanged.
-- No Terraform apply, commit, or push was performed.
+- Removidas entradas duplicadas/incompatíveis de ambiente de role do Terraform
+  e tornada a seleção de credenciais AWS dependente dos valores de ambiente do
+  job; o download de artefato agora tem a permissão explícita `actions:
+  read`.
+- Adicionada validação para CIDRs de endpoint público do EKS e ARNs de IAM
+  role neutros quanto à partition. A política do Load Balancer Controller e o
+  contrato de output de role nulo existente foram intencionalmente mantidos
+  inalterados.
+- Nenhum apply do Terraform, commit ou push foi realizado.
 
-## 2026-08-24 (AWS Academy compatibility)
+## 2026-08-24 (compatibilidade com AWS Academy)
 
-- Added explicit Academy/IAM mode variables and validated LabRole ARN reuse for
-  the EKS control plane and managed node group.
-- Academy mode disables IAM, OIDC/IRSA, and AWS Load Balancer Controller
-  resources while retaining Metrics Server and the Kubernetes LoadBalancer
-  service path.
-- Added workflow dispatch inputs and documented temporary-credential usage.
-- No infrastructure apply, remote initialization, commit, or push was performed.
+- Adicionadas variáveis explícitas de modo Academy/IAM e validado o reuso do
+  ARN da LabRole para o control plane do EKS e o node group gerenciado.
+- O modo Academy desabilita IAM, OIDC/IRSA e recursos do AWS Load Balancer
+  Controller, mantendo o Metrics Server e o caminho de Service
+  LoadBalancer do Kubernetes.
+- Adicionados inputs de disparo de workflow e documentado o uso de
+  credenciais temporárias.
+- Nenhum apply de infraestrutura, inicialização remota, commit ou push foi
+  realizado.
 
-## 2026-08-24 (Academy workflow integration)
+## 2026-08-24 (integração do workflow Academy)
 
-- Added explicit plan/apply dispatch gating and required Academy mode checks.
-- Moved manual Terraform plan/apply jobs to the `self-hosted`, `linux`,
-  `eks-private` runner labels; credential-free validation remains on
-  `ubuntu-latest`.
-- Required a pre-existing Load Balancer Controller role when IAM management is
-  disabled outside Academy mode.
-- No Terraform apply, commit, push, or merge was performed.
+- Adicionados gates explícitos de disparo de plan/apply e checagens
+  obrigatórias do modo Academy.
+- Movidos os jobs manuais de plan/apply do Terraform para os labels de runner
+  `self-hosted`, `linux`, `eks-private`; a validação sem credenciais permanece
+  no `ubuntu-latest`.
+- Exigida uma role pré-existente do Load Balancer Controller quando o
+  gerenciamento de IAM está desabilitado fora do modo Academy.
+- Nenhum apply do Terraform, commit, push ou merge foi realizado.
 
-## 2026-08-24 (Academy hosted runner access)
+## 2026-08-24 (acesso via runner hospedado do Academy)
 
-- Academy plan/apply now use `ubuntu-latest`; normal mode retains the private
-  self-hosted runner labels.
-- Academy jobs allowlist the current GitHub Actions CIDRs for the public EKS API
-  endpoint without using an unrestricted CIDR; LabRole/IAM-disabled behavior and
-  workflow action inputs remain unchanged.
-- No Terraform apply, commit, or push was performed.
+- O plan/apply do Academy agora usam `ubuntu-latest`; o modo normal mantém os
+  labels de runner self-hosted privado.
+- Os jobs do Academy liberam na allowlist os CIDRs atuais do GitHub Actions
+  para o endpoint público da API do EKS, sem usar um CIDR irrestrito; o
+  comportamento de LabRole/IAM desabilitado e os inputs de ação do workflow
+  permanecem inalterados.
+- Nenhum apply do Terraform, commit ou push foi realizado.
 
-## 2026-08-24 (Academy IAM session-context fix)
+## 2026-08-24 (correção de contexto de sessão IAM do Academy)
 
-- Vendored the resolved terraform-aws-modules/eks/aws v20.37.2 runtime module,
-  including its required nested modules, and gated only its IAM session-context
-  data source on creator-admin permissions.
-- Academy mode explicitly disables creator-admin permissions while retaining
-  LabRole selection and no IAM/IRSA/ALB role creation.
-- Terraform fmt, backendless init, and validate passed. AWS Academy plan was
-  not run because the local AWS CLI failed before credentials could be checked.
+- Vendorizado o módulo runtime resolvido terraform-aws-modules/eks/aws
+  v20.37.2, incluindo seus módulos aninhados necessários, restringindo apenas
+  sua data source de contexto de sessão IAM a permissões de admin do criador.
+- O modo Academy desabilita explicitamente as permissões de admin do criador,
+  mantendo a seleção da LabRole e nenhuma criação de role IAM/IRSA/ALB.
+- Terraform fmt, init sem backend e validate passaram. O plan do AWS Academy
+  não foi executado porque a AWS CLI local falhou antes que as credenciais
+  pudessem ser verificadas.
