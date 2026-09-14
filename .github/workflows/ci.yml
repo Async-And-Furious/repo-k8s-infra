@@ -108,7 +108,7 @@ jobs:
     needs: validate
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
     environment: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || inputs.environment == 'hml' && 'hml' || 'production' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.academy_mode == true && 'ubuntu-latest' || 'eks-private' }}
     permissions:
       contents: read
       actions: read
@@ -131,6 +131,7 @@ jobs:
       PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
       PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
       AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED: "false"
+      RUNNER_CIDR: ""
     steps:
       - name: Guard production apply
         if: github.event_name == 'workflow_dispatch' && env.ENVIRONMENT == 'prod' && env.ACTION == 'apply'
@@ -162,7 +163,7 @@ jobs:
         with:
           terraform_version: "~> 1.13"
       - name: Discover HML runner address
-        if: env.ENVIRONMENT == 'hml'
+        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -179,7 +180,7 @@ jobs:
           )"
           echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
       - name: Discover production runner address
-        if: env.ENVIRONMENT == 'prod'
+        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'prod'
         shell: bash
         run: |
           set -euo pipefail
@@ -211,10 +212,11 @@ jobs:
                   aws_academy: $aws_academy,
                   manage_iam: $manage_iam,
                   lab_role_arn: $lab_role_arn,
-                  node_desired_size: 3,
-                   cluster_endpoint_public_access: true,
+                  node_desired_size: 3
+                } + (if $aws_academy then {
+                  cluster_endpoint_public_access: true,
                   cluster_endpoint_public_access_cidrs: [$runner_cidr]
-                }' > terraform.auto.tfvars.json
+                } else {} end)' > terraform.auto.tfvars.json
           else
             jq -n --arg environment "$ENVIRONMENT" \
               --arg aws_region "$AWS_REGION" \
@@ -227,10 +229,11 @@ jobs:
                 aws_academy: $aws_academy,
                 manage_iam: $manage_iam,
                 lab_role_arn: $lab_role_arn,
-                node_desired_size: 2,
-                 cluster_endpoint_public_access: true,
+                node_desired_size: 2
+              } + (if $aws_academy then {
+                cluster_endpoint_public_access: true,
                 cluster_endpoint_public_access_cidrs: [$runner_cidr]
-              }' > terraform.auto.tfvars.json
+              } else {} end)' > terraform.auto.tfvars.json
           fi
       - name: Validate Terraform mode
         if: env.AWS_ACADEMY == 'true'
@@ -360,7 +363,7 @@ jobs:
             echo "Terraform state contains no resources; destroy is a no-op."
           fi
       - name: Allow HML runner to reach existing EKS cluster
-        if: env.ENVIRONMENT == 'hml' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
+        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -407,7 +410,7 @@ jobs:
             exit 1
           fi
       - name: Allow production runner to reach existing EKS cluster
-        if: env.ENVIRONMENT == 'prod' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
+        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'prod' && ((env.ACTION == 'plan' || env.ACTION == 'apply') || env.DESTROY_HAS_STATE == 'true')
         shell: bash
         run: |
           set -euo pipefail
@@ -648,7 +651,7 @@ jobs:
     needs: plan
     if: needs.plan.result == 'success' && ((github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')) || (github.event_name == 'workflow_dispatch' && inputs.action == 'apply'))
     environment: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || inputs.environment == 'hml' && 'hml' || 'production' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.academy_mode == true && 'ubuntu-latest' || 'eks-private' }}
     permissions:
       contents: read
       actions: read
@@ -670,6 +673,7 @@ jobs:
       PROD_ENDPOINT_ORIGINAL_PRIVATE_ACCESS: ""
       PROD_ENDPOINT_ORIGINAL_PUBLIC_ACCESS: ""
       PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
+      RUNNER_CIDR: ""
     steps:
       - name: Guard production apply
         if: github.event_name == 'workflow_dispatch' && env.ENVIRONMENT == 'prod'
@@ -705,7 +709,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
       - name: Discover HML runner address
-        if: env.ENVIRONMENT == 'hml'
+        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -721,7 +725,7 @@ jobs:
           )"
           echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
       - name: Allow HML runner to reach existing EKS cluster
-        if: env.ENVIRONMENT == 'hml'
+        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'hml'
         shell: bash
         run: |
           set -euo pipefail
@@ -765,7 +769,7 @@ jobs:
       - name: Initialize Terraform
         run: terraform init -reconfigure -input=false -backend-config=backend.hcl
       - name: Discover production runner address
-        if: env.ENVIRONMENT == 'prod'
+        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'prod'
         shell: bash
         run: |
           set -euo pipefail
@@ -781,7 +785,7 @@ jobs:
           )"
           echo "RUNNER_CIDR=$RUNNER_CIDR" >> "$GITHUB_ENV"
       - name: Allow production runner to reach existing EKS cluster
-        if: env.ENVIRONMENT == 'prod'
+        if: env.AWS_ACADEMY == 'true' && env.ENVIRONMENT == 'prod'
         shell: bash
         run: |
           set -euo pipefail
@@ -832,10 +836,11 @@ jobs:
               aws_region: $aws_region,
               aws_academy: $aws_academy,
               manage_iam: $manage_iam,
-              lab_role_arn: $lab_role_arn,
+              lab_role_arn: $lab_role_arn
+            } + (if $aws_academy then {
               cluster_endpoint_public_access: true,
               cluster_endpoint_public_access_cidrs: [$runner_cidr]
-            }' > terraform.auto.tfvars.json
+            } else {} end)' > terraform.auto.tfvars.json
       - name: Prepare HML Terraform variables
         if: env.ENVIRONMENT == 'hml'
         shell: bash
@@ -851,10 +856,11 @@ jobs:
               aws_region: $aws_region,
               aws_academy: $aws_academy,
               manage_iam: $manage_iam,
-              lab_role_arn: $lab_role_arn,
+              lab_role_arn: $lab_role_arn
+            } + (if $aws_academy then {
               cluster_endpoint_public_access: true,
               cluster_endpoint_public_access_cidrs: [$runner_cidr]
-            }' > terraform.auto.tfvars.json
+            } else {} end)' > terraform.auto.tfvars.json
       - name: Terraform plan for HML runner
         if: env.ENVIRONMENT == 'hml'
         run: terraform plan -input=false -var='node_desired_size=3' -out=tfplan
