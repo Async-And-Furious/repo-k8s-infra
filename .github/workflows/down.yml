@@ -1,10 +1,16 @@
-name: HML Terraform Destroy
+name: Terraform Destroy
 
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: Target environment to destroy
+        required: true
+        default: hml
+        type: choice
+        options: [hml, prod]
       confirm:
-        description: Type DESTROY HML to confirm deletion
+        description: Type DESTROY HML or DESTROY PROD to confirm deletion
         required: true
         type: string
 
@@ -14,10 +20,10 @@ permissions:
 
 jobs:
   down:
-    name: Destroy HML infrastructure
+    name: Destroy ${{ inputs.environment }} infrastructure
     uses: ./.github/workflows/ci.yml
     with:
-      environment: hml
+      environment: ${{ inputs.environment }}
       action: destroy
       academy_mode: false
       confirm: ${{ inputs.confirm }}

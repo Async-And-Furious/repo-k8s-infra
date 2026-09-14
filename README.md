@@ -4,10 +4,19 @@ Tech Challenge Fase 3 — VPC, EKS and ECR via Terraform.
 
 The EKS module also bootstraps the AWS Load Balancer Controller (including its
 TargetGroupBinding CRD) and Metrics Server with pinned Helm chart versions.
+The EKS version is preserved for existing clusters by default; set
+`cluster_version` explicitly when an intentional upgrade is approved.
 In AWS Academy mode the controller uses the node group's existing LabRole
 instead of IRSA. The Kubernetes API is private by default; set
 `cluster_endpoint_public_access=true` only when required and provide no more
 than 40 narrow entries in `cluster_endpoint_public_access_cidrs`.
+The managed node group intentionally defaults to the single `t3.micro` instance
+type. Avoiding an instance-type list prevents Terraform/EKS from replacing the
+node group and temporarily overlapping its nodes, which can exceed the account's
+vCPU quota. Stage 1 temporarily sets the managed node group to
+`min=2`, `desired=2`, and `max=2`, so replacement stays within the account's
+8-vCPU limit. After the stage 1 apply succeeds, a follow-up must scale all three
+values back to 3.
 
 ## Scope
 
