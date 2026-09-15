@@ -10,14 +10,12 @@ Em modo AWS Academy, o controller usa o `LabRole` já existente do node group
 em vez de IRSA. A API do Kubernetes é privada por padrão; defina
 `cluster_endpoint_public_access=true` somente quando necessário e forneça no
 máximo 40 entradas restritas em `cluster_endpoint_public_access_cidrs`.
-O node group gerenciado usa por padrão, intencionalmente, apenas o tipo de
-instância `t3.micro`. Evitar uma lista de tipos de instância impede que o
-Terraform/EKS substitua o node group e sobreponha temporariamente seus nós, o
-que pode exceder a quota de vCPU da conta. O Stage 1 define temporariamente o
-node group gerenciado para `min=2`, `desired=2` e `max=2`, para que a
-substituição fique dentro do limite de 8 vCPUs da conta. Depois que o apply do
-stage 1 for bem-sucedido, um follow-up precisa reescalar os três valores de
-volta para 3.
+O node group gerenciado usa um único tipo de instância, `t3.small` por padrão
+(`node_instance_types = null` no root, resolvido por `coalesce`). Evitar uma
+lista de tipos impede que o EKS substitua o node group e sobreponha nós
+temporariamente, o que pode exceder a quota de vCPU da conta. A escala padrão
+é `desired=3`, `min=2`, `max=3`. A capacidade é SPOT em HML e ON_DEMAND em
+PROD (`capacity_type` em `modules/eks/main.tf`).
 
 ## Escopo
 
@@ -52,7 +50,8 @@ backend S3 abaixo.
 - A inicialização do provider Helm exige acesso de rede ao Terraform
   Registry; os charts Helm são buscados dos repositórios fixados durante o
   apply.
-- O AWS Load Balancer Controller usa o role IRSA criado pelo Terraform. O
+- Fora do modo Academy, o AWS Load Balancer Controller usa o role IRSA criado
+  pelo Terraform (no modo Academy, o `LabRole` dos nós). O
   CLI `aws` precisa estar disponível onde quer que os recursos Helm sejam
   aplicados, porque o provider usa `aws eks get-token`.
 - Não aplique até que os pré-requisitos do cluster EKS e do node group
@@ -127,60 +126,75 @@ correspondente; nunca cruze ARNs entre ambientes.
 ## GitHub Actions
 
 Pull requests rodam apenas checks de formatação e validação em
-`ubuntu-latest`, sem credenciais AWS. Um push na branch de integração
-`develop` aplica automaticamente o HML (usando variáveis do repositório para
-seu modo). Um push na `main` gera um plan de produção e só o aplica depois
-que o Environment protegido `production` do GitHub aprovar o job de apply.
-O disparo manual seleciona `hml` ou `prod` e `plan`, `apply`,
-`destroy-plan` ou `destroy`. O modo normal usa os labels de runner
-self-hosted `self-hosted`, `linux` e `eks-private`, para que o endpoint
-privado do EKS e o provider Helm fiquem acessíveis.
-O modo Academy HML usa `ubuntu-latest`; cada execução valida o endereço
-IPv4 público atual do runner hospedado e restringe temporariamente o
-endpoint público do EKS a esse `/32` único. O workflow preserva o acesso ao
-endpoint privado e sempre desabilita o acesso ao endpoint público depois que
-Terraform e Helm terminam. Nenhum CIDR irrestrito é usado. Operações
-manuais de plan e apply rodam diretamente contra o state S3 do ambiente
-selecionado. Execuções de produção usam o Environment protegido do GitHub
-`production`; suas regras de aprovação controlam o job de apply. O apply de
-produção também exige `confirm="APPLY PROD"`. As mesmas credenciais
-temporárias do AWS Academy podem ser usadas para qualquer um dos dois
-ambientes lógicos; state, variáveis e artefatos de plan continuam
-escopados por ambiente. Operações de state do mesmo ambiente não rodam
-concorrentemente.
+`ubuntu-latest`, sem credenciais AWS. Um push em `develop` aplica o HML; um
+push em `main` gera o plan de produção e só o aplica depois que o Environment
+protegido `production` aprovar o job. O disparo manual seleciona `hml` ou
+`prod` e a ação `plan`, `apply`, `destroy-plan` ou `destroy`. O apply manual
+de produção exige `confirm="APPLY PROD"`. Os plans são salvos como `tfplan` no
+artefato da execução, e o apply usa exatamente esse plan. Operações de state
+do mesmo ambiente não rodam concorrentemente.
 
-Antes do bootstrap de backend ou de uma mudança no endpoint do EKS, o
-workflow faz uma checagem somente leitura de credenciais STS e uma consulta
-ao state qualificada por conta. Ele falha de forma clara quando as
-credenciais estão ausentes, expiradas ou não autorizadas. Os plans são
-salvos como `tfplan` e enviados como artefato da execução; o apply usa esse
-plan salvo.
+O runner é `eks-private` por padrão, para alcançar o endpoint privado do EKS e
+o provider Helm. Um disparo manual com `academy_mode=true` usa `ubuntu-latest`:
+o workflow descobre o IPv4 público do runner, restringe temporariamente o
+endpoint público do EKS a esse `/32` e restaura a configuração original ao
+final, em passos separados para HML e para produção. Nenhum CIDR irrestrito é
+usado.
 
-Operações de destroy só estão disponíveis para execuções Academy HML. As
-duas ações de destroy inspecionam o objeto de state S3 qualificado por
-conta sem criar ou configurar o bucket; um objeto ausente ou um state sem
-recursos é um no-op bem-sucedido. `destroy-plan` roda apenas um plan de
-destroy. `destroy` exige a confirmação exata `DESTROY HML`, cria um plan de
-destroy salvo e aplica exatamente esse plan. Nenhuma das duas ações remove
-o bucket de state nem o objeto de state. O Academy HML permite que o
-Terraform apague o repositório ECR com suas imagens; o comportamento padrão
-e de produção do ECR continua rejeitando exclusão de repositório não vazio.
+Antes do bootstrap de backend ou de qualquer mudança no endpoint, o workflow
+faz uma checagem somente leitura de credenciais STS e do state qualificado por
+conta, e falha de forma clara quando as credenciais estão ausentes, expiradas
+ou sem permissão.
 
-O disparo manual expõe `aws_academy`, `manage_iam` e `lab_role_arn`.
-Selecione `aws_academy=true`, `manage_iam=false`, e cole o ARN atual do
-LabRole em `lab_role_arn`. Alternativamente, defina a variável de
-repositório `LAB_ROLE_ARN`; o workflow a exporta como `TF_VAR_lab_role_arn`.
-Defina `AWS_ROLE_ARN` para o caminho normal via OIDC. Para uma sessão AWS
-Academy, configure estes secrets de repositório juntos:
+### Destroy
 
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
-- `AWS_SESSION_TOKEN`
+`destroy-plan` e `destroy` estão disponíveis para HML e PROD, sempre em
+disparo manual (`ci.yml` ou `down.yml`). O `destroy` exige a confirmação exata
+`DESTROY HML` ou `DESTROY PROD`, cria um plan de destroy salvo e aplica
+exatamente esse plan. As duas ações inspecionam o objeto de state sem criar ou
+configurar o bucket; objeto ausente ou state vazio é um no-op bem-sucedido, e
+nem o bucket nem o objeto de state são removidos. No Academy HML o Terraform
+pode apagar o repositório ECR com as imagens (`force_delete`); nos demais
+casos o ECR continua rejeitando exclusão de repositório não vazio.
 
-O workflow usa as credenciais temporárias somente quando os três secrets
-estão presentes; caso contrário, usa OIDC como fallback. Rotacione os
-secrets depois de cada sessão AWS Academy com `gh secret set` (nunca
-commite nem imprima seus valores).
+### Credenciais e variáveis
+
+Não há OIDC. O workflow usa os secrets `AWS_ACCESS_KEY_ID` e
+`AWS_SECRET_ACCESS_KEY`, e inclui `AWS_SESSION_TOKEN` quando ele está presente
+(sessão AWS Academy). Rotacione os três depois de cada sessão com
+`gh secret set`, sem commitar nem imprimir os valores.
+
+No modo Academy, o disparo manual expõe `academy_mode` e `lab_role_arn`; com
+`academy_mode=true` o workflow define `manage_iam=false`. Alternativamente,
+defina a variável `LAB_ROLE_ARN`, exportada como `TF_VAR_lab_role_arn`.
+
+## Observabilidade (New Relic)
+
+O root também provisiona a observabilidade do cluster e da aplicação na New
+Relic: o chart `nri-bundle` `8.0.24` (infraestrutura, logs e
+`kube-state-metrics`), um dashboard, uma política de alertas com condições de
+indisponibilidade, taxa de erro, CPU, memória e crash loop, e um workflow de
+notificação por e-mail. O output `observability_dashboard_url` publica o link
+do dashboard.
+
+O CI exige:
+
+| Nome | Tipo |
+| --- | --- |
+| `NEW_RELIC_LICENSE_KEY` | secret |
+| `NEW_RELIC_API_KEY` | secret |
+| `NEW_RELIC_ACCOUNT_ID` | variável |
+| `NEW_RELIC_ALERT_EMAIL` | variável |
+
+## Workflows
+
+| Workflow | Disparo | O que faz |
+| --- | --- | --- |
+| `ci.yml` | pull request, push em `develop`/`main`, manual | Validação, plan, apply e destroy |
+| `up.yml` | manual | Apply de HML |
+| `down.yml` | manual | Destroy de HML ou PROD, com confirmação digitada |
+| `diagnose-ec2-capacity.yml` | manual | Diagnóstico somente leitura da capacidade EC2 de HML |
+| `trivy.yml` | push, pull request, agendado | Scan de configuração IaC com gate em HIGH e CRITICAL |
 
 ## Convenção de nomenclatura
 
