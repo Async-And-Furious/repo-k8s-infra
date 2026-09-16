@@ -108,7 +108,7 @@ jobs:
     needs: validate
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'))
     environment: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'hml' || github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || inputs.environment == 'hml' && 'hml' || 'production' }}
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && (inputs.academy_mode == true || inputs.action == 'plan' || inputs.action == 'apply')) && 'ubuntu-latest' || (github.event_name == 'workflow_call' && (inputs.action == 'plan' || inputs.action == 'apply')) && 'ubuntu-latest' || github.event_name == 'push' && 'ubuntu-latest' || 'eks-private' }}
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && (inputs.academy_mode == true || inputs.action == 'plan' || inputs.action == 'apply' || inputs.action == 'destroy-plan' || inputs.action == 'destroy')) && 'ubuntu-latest' || (github.event_name == 'workflow_call' && (inputs.action == 'plan' || inputs.action == 'apply')) && 'ubuntu-latest' || github.event_name == 'push' && 'ubuntu-latest' || 'eks-private' }}
     permissions:
       contents: read
       actions: read
@@ -132,7 +132,7 @@ jobs:
       PROD_ENDPOINT_ORIGINAL_PUBLIC_CIDRS: ""
       AWS_CREDENTIAL_PREFLIGHT_SUCCEEDED: "false"
       RUNNER_CIDR: ""
-      EXPOSE_ENDPOINT: ${{ github.event_name == 'push' || inputs.academy_mode == true || inputs.action == 'plan' || inputs.action == 'apply' }}
+      EXPOSE_ENDPOINT: ${{ github.event_name == 'push' || inputs.academy_mode == true || inputs.action == 'plan' || inputs.action == 'apply' || inputs.action == 'destroy-plan' || inputs.action == 'destroy' }}
     steps:
       - name: Guard production apply
         if: github.event_name == 'workflow_dispatch' && env.ENVIRONMENT == 'prod' && env.ACTION == 'apply'
