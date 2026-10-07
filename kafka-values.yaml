@@ -1,0 +1,68 @@
+# Bitnami Kafka chart 32.4.3. Credentials are supplied by the pre-created
+# kafka-sasl Secret; this file intentionally contains no secret material.
+fullnameOverride: kafka
+kraft:
+  enabled: true
+zookeeper:
+  enabled: false
+controller:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  heapOpts: "-Xmx512m -Xms512m"
+  persistence:
+    enabled: true
+    storageClass: gp3
+    size: 20Gi
+broker:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 2Gi
+  heapOpts: "-Xmx1Gi -Xms1Gi"
+  persistence:
+    enabled: true
+    storageClass: gp3
+    size: 20Gi
+listeners:
+  client:
+    protocol: SASL
+  interbroker:
+    protocol: SASL
+  controller:
+    protocol: SASL
+sasl:
+  enabled: true
+  client:
+    users:
+      - app
+    existingSecret: kafka-sasl
+  interBrokerMechanism: scram-sha-256
+  controllerMechanism: scram-sha-256
+  mechanisms: scram-sha-256
+extraEnvVars:
+  - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+    value: "false"
+provisioning:
+  enabled: true
+  numPartitions: 3
+  replicationFactor: 3
+  topics:
+    - name: os.events
+      config:
+        retention.ms: "604800000"
+    - name: os.events.retry
+      config:
+        retention.ms: "604800000"
+    - name: os.events.dlt
+      config:
+        retention.ms: "604800000"

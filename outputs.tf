@@ -91,3 +91,18 @@ output "observability_dashboard_url" {
   description = "New Relic dashboard URL for this environment (issue #166)"
   value       = newrelic_one_dashboard.observability.permalink
 }
+
+output "kafka_bootstrap_servers" {
+  description = "Internal Kafka bootstrap service consumed by application deployments"
+  value       = "kafka.kafka.svc.cluster.local:9092"
+}
+
+output "kafka_secret_name" {
+  description = "Kubernetes Secret contract for Kafka SASL credentials"
+  value       = var.kafka_secret_name
+}
+
+output "kafka_topics" {
+  description = "Kafka event, retry and dead-letter topics"
+  value       = ["os.events", "os.events.retry", "os.events.dlt"]
+}

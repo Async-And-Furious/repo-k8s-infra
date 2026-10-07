@@ -75,6 +75,35 @@ resource "aws_security_group_rule" "nodes_from_internal_alb" {
   source_security_group_id = module.internal_alb.security_group_id
 }
 
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+  }
+}
+
+resource "kubernetes_storage_class_v1" "gp3" {
+  metadata {
+    name = "gp3"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy         = "Delete"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+  parameters = {
+    type      = "gp3"
+    fsType    = "ext4"
+    encrypted = "true"
+  }
+}
+
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
@@ -150,6 +179,24 @@ resource "helm_release" "metrics_server" {
   repository       = "https://kubernetes-sigs.github.io/metrics-server/"
   chart            = "metrics-server"
   version          = "3.12.2"
+}
+
+resource "helm_release" "kafka" {
+  depends_on = [module.eks, kubernetes_storage_class_v1.gp3]
+
+  name             = "kafka"
+  namespace        = "kafka"
+  create_namespace = true
+  repository       = "https://charts.bitnami.com/bitnami"
+  chart            = "kafka"
+  version          = "32.4.3"
+  values           = [file("${path.module}/kafka-values.yaml")]
+
+  # The workflow materializes this Secret from Secrets Manager before apply.
+  set {
+    name  = "sasl.existingSecret"
+    value = var.kafka_secret_name
+  }
 }
 
 # New Relic Kubernetes integration (issue #163). Minimal footprint on purpose:

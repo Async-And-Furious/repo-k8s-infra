@@ -199,3 +199,14 @@ variable "new_relic_alert_email" {
   description = "Email address notified by the operational alert policy (issue #167)"
   type        = string
 }
+
+variable "kafka_secret_name" {
+  description = "Pre-created Kubernetes Secret containing Kafka SASL credentials"
+  type        = string
+  default     = "kafka-sasl"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.kafka_secret_name))
+    error_message = "kafka_secret_name must be a Kubernetes DNS label."
+  }
+}
