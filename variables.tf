@@ -13,12 +13,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "vpc_cidr" {
-  description = "VPC CIDR used by the private node network"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
 variable "cluster_version" {
   description = "Optional EKS Kubernetes version; leave unset to preserve the version reported by an existing cluster"
   type        = string
@@ -118,24 +112,6 @@ check "load_balancer_controller_role_configuration" {
   assert {
     condition     = var.manage_iam || var.aws_academy || var.load_balancer_controller_role_arn != ""
     error_message = "load_balancer_controller_role_arn is required when manage_iam=false outside AWS Academy mode."
-  }
-}
-
-variable "ebs_csi_driver_role_arn" {
-  description = "Optional existing IAM role ARN for the EBS CSI driver; required when IAM management is disabled outside AWS Academy mode"
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.ebs_csi_driver_role_arn == trimspace(var.ebs_csi_driver_role_arn) && (var.ebs_csi_driver_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.ebs_csi_driver_role_arn)))
-    error_message = "ebs_csi_driver_role_arn must be empty or a valid partition-neutral IAM role ARN."
-  }
-}
-
-check "ebs_csi_driver_role_configuration" {
-  assert {
-    condition     = var.manage_iam || var.aws_academy || trimspace(var.ebs_csi_driver_role_arn) != ""
-    error_message = "ebs_csi_driver_role_arn is required and must be non-empty when manage_iam=false outside AWS Academy mode."
   }
 }
 

@@ -31,11 +31,6 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
-variable "vpc_cidr" {
-  description = "VPC CIDR used to constrain node security group egress"
-  type        = string
-}
-
 variable "cluster_endpoint_public_access" {
   description = "Whether the EKS Kubernetes API endpoint is reachable publicly"
   type        = bool
@@ -97,12 +92,6 @@ variable "load_balancer_controller_role_arn" {
     condition     = var.load_balancer_controller_role_arn == trimspace(var.load_balancer_controller_role_arn) && (var.load_balancer_controller_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.load_balancer_controller_role_arn)))
     error_message = "load_balancer_controller_role_arn must be empty or a valid partition-neutral IAM role ARN."
   }
-}
-
-variable "ebs_csi_driver_role_arn" {
-  description = "Existing IAM role ARN for the EBS CSI driver when IAM management is disabled"
-  type        = string
-  default     = ""
 }
 
 variable "cluster_version" {
