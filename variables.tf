@@ -13,6 +13,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "vpc_cidr" {
+  description = "VPC CIDR used by the private node network"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
 variable "cluster_version" {
   description = "Optional EKS Kubernetes version; leave unset to preserve the version reported by an existing cluster"
   type        = string
@@ -25,7 +31,7 @@ variable "cluster_version" {
 }
 
 variable "node_instance_types" {
-  description = "Optional EC2 instance types for the managed node group; defaults to t3.small for enough pod capacity in HML and production"
+  description = "Optional EC2 instance types for the managed node group; defaults to t3.medium for #313 pod capacity"
   type        = list(string)
   default     = null
 
@@ -115,6 +121,24 @@ check "load_balancer_controller_role_configuration" {
   }
 }
 
+variable "ebs_csi_driver_role_arn" {
+  description = "Optional existing IAM role ARN for the EBS CSI driver; required when IAM management is disabled outside AWS Academy mode"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.ebs_csi_driver_role_arn == trimspace(var.ebs_csi_driver_role_arn) && (var.ebs_csi_driver_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.ebs_csi_driver_role_arn)))
+    error_message = "ebs_csi_driver_role_arn must be empty or a valid partition-neutral IAM role ARN."
+  }
+}
+
+check "ebs_csi_driver_role_configuration" {
+  assert {
+    condition     = var.manage_iam || var.aws_academy || trimspace(var.ebs_csi_driver_role_arn) != ""
+    error_message = "ebs_csi_driver_role_arn is required and must be non-empty when manage_iam=false outside AWS Academy mode."
+  }
+}
+
 variable "cluster_endpoint_public_access" {
   description = "Whether the EKS Kubernetes API endpoint is reachable publicly"
   type        = bool
@@ -198,4 +222,15 @@ variable "new_relic_api_key" {
 variable "new_relic_alert_email" {
   description = "Email address notified by the operational alert policy (issue #167)"
   type        = string
+}
+
+variable "kafka_secret_name" {
+  description = "Pre-created Kubernetes Secret containing Kafka SASL credentials"
+  type        = string
+  default     = "kafka-sasl"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$", var.kafka_secret_name))
+    error_message = "kafka_secret_name must be a Kubernetes DNS label."
+  }
 }

@@ -39,6 +39,11 @@ output "load_balancer_controller_role_arn" {
   value = module.eks.load_balancer_controller_role_arn
 }
 
+output "ebs_csi_driver_role_arn" {
+  description = "Effective IRSA role ARN used by the EBS CSI driver"
+  value       = module.eks.ebs_csi_driver_role_arn
+}
+
 output "node_security_group_id" {
   description = "Consumed by repo-db-infra's allowed_security_group_ids"
   value       = module.eks.node_security_group_id
@@ -90,4 +95,23 @@ output "application_backend_port" {
 output "observability_dashboard_url" {
   description = "New Relic dashboard URL for this environment (issue #166)"
   value       = newrelic_one_dashboard.observability.permalink
+}
+
+output "kafka_bootstrap_servers" {
+  description = "Internal Kafka bootstrap service consumed by application deployments"
+  value       = "kafka.kafka.svc.cluster.local:9092"
+}
+
+output "kafka_secret_name" {
+  description = "Kubernetes Secret contract for Kafka SASL credentials"
+  value       = var.kafka_secret_name
+}
+
+output "kafka_topics" {
+  description = "Kafka event, retry and dead-letter topics"
+  value = [
+    "os.eventos.v1", "os.retry.v1", "os.dlt.v1",
+    "billing.eventos.v1", "billing.retry.v1", "billing.dlt.v1",
+    "execucao.eventos.v1", "execucao.retry.v1", "execucao.dlt.v1",
+  ]
 }

@@ -17,7 +17,7 @@ provider "newrelic" {
 }
 
 locals {
-  node_instance_types = coalesce(var.node_instance_types, ["t3.small"])
+  node_instance_types = coalesce(var.node_instance_types, ["t3.medium"])
   new_relic_app_name  = "async-furious-project-${var.environment}"
 }
 
@@ -38,6 +38,7 @@ module "eks" {
   node_max_size       = var.node_max_size
   vpc_id              = module.vpc.vpc_id
   private_subnet_ids  = module.vpc.private_subnet_ids
+  vpc_cidr            = var.vpc_cidr
 
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
@@ -47,6 +48,7 @@ module "eks" {
   eks_cluster_role_arn                 = var.eks_cluster_role_arn
   eks_node_role_arn                    = var.eks_node_role_arn
   load_balancer_controller_role_arn    = var.load_balancer_controller_role_arn
+  ebs_csi_driver_role_arn              = var.ebs_csi_driver_role_arn
 }
 
 module "ecr" {
@@ -73,6 +75,65 @@ resource "aws_security_group_rule" "nodes_from_internal_alb" {
   protocol                 = "tcp"
   security_group_id        = module.eks.node_security_group_id
   source_security_group_id = module.internal_alb.security_group_id
+}
+
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+  }
+}
+
+data "aws_secretsmanager_secret_version" "kafka" {
+  secret_id = "tc3/kafka/${var.environment}"
+}
+
+locals {
+  kafka_credentials = jsondecode(data.aws_secretsmanager_secret_version.kafka.secret_string)
+}
+
+resource "kubernetes_namespace_v1" "kafka" {
+  metadata {
+    name = "kafka"
+  }
+}
+
+resource "kubernetes_secret_v1" "kafka_sasl" {
+  depends_on = [module.eks, kubernetes_namespace_v1.kafka]
+
+  metadata {
+    name      = var.kafka_secret_name
+    namespace = kubernetes_namespace_v1.kafka.metadata[0].name
+  }
+
+  type = "Opaque"
+  data = {
+    "client-passwords"      = local.kafka_credentials.password
+    "inter-broker-password" = local.kafka_credentials.password
+    "controller-password"   = local.kafka_credentials.password
+  }
+}
+
+resource "kubernetes_storage_class_v1" "gp3" {
+  metadata {
+    name = "gp3"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy         = "Delete"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+  parameters = {
+    type      = "gp3"
+    fsType    = "ext4"
+    encrypted = "true"
+  }
 }
 
 provider "helm" {
@@ -150,6 +211,24 @@ resource "helm_release" "metrics_server" {
   repository       = "https://kubernetes-sigs.github.io/metrics-server/"
   chart            = "metrics-server"
   version          = "3.12.2"
+}
+
+resource "helm_release" "kafka" {
+  depends_on = [module.eks, kubernetes_storage_class_v1.gp3, kubernetes_secret_v1.kafka_sasl]
+
+  name             = "kafka"
+  namespace        = "kafka"
+  create_namespace = false
+  repository       = "https://charts.bitnami.com/bitnami"
+  chart            = "kafka"
+  version          = "32.4.3"
+  values           = [file("${path.module}/kafka-values.yaml")]
+
+  # The workflow materializes this Secret from Secrets Manager before apply.
+  set {
+    name  = "sasl.existingSecret"
+    value = var.kafka_secret_name
+  }
 }
 
 # New Relic Kubernetes integration (issue #163). Minimal footprint on purpose:

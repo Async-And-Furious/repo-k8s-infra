@@ -1,0 +1,97 @@
+# Bitnami Kafka chart 32.4.3. Credentials are supplied by the pre-created
+# kafka-sasl Secret; this file intentionally contains no secret material.
+fullnameOverride: kafka
+kraft:
+  enabled: true
+zookeeper:
+  enabled: false
+controller:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+  heapOpts: "-Xmx256m -Xms256m"
+  persistence:
+    enabled: true
+    storageClass: gp3
+    size: 20Gi
+broker:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  heapOpts: "-Xmx512m -Xms512m"
+  persistence:
+    enabled: true
+    storageClass: gp3
+    size: 20Gi
+listeners:
+  client:
+    protocol: SASL_PLAINTEXT
+  interbroker:
+    protocol: SASL_PLAINTEXT
+  controller:
+    protocol: SASL_PLAINTEXT
+sasl:
+  enabledMechanisms: PLAIN
+  # Application clients use the explicit broker user `app`; inter-broker and
+  # controller identities remain chart-managed and use their own passwords.
+  client:
+    users:
+      - app
+  existingSecret: kafka-sasl
+  interbroker:
+    user: admin
+  controller:
+    user: controller
+  interBrokerMechanism: plain
+  controllerMechanism: plain
+extraEnvVars:
+  - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+    value: "false"
+extraDeploy:
+  # Bitnami Kafka 32.4.3 does not expose the old provisioning.* values. The
+  # chart's supported extraDeploy hook runs the client-side, idempotent create.
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: kafka-topic-bootstrap
+      namespace: kafka
+      annotations:
+        helm.sh/hook: post-install,post-upgrade
+        helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    spec:
+      backoffLimit: 12
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: topics
+              image: bitnami/kafka:3.9.0-debian-12-r9
+              env:
+                - name: KAFKA_CLIENT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: "{{ .Values.sasl.existingSecret }}"
+                      key: client-passwords
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  cat >/tmp/client.properties <<EOF
+                  security.protocol=SASL_PLAINTEXT
+                  sasl.mechanism=PLAIN
+                  sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="app" password="${KAFKA_CLIENT_PASSWORD}";
+                  EOF
+                  until kafka-topics.sh --bootstrap-server kafka.kafka.svc.cluster.local:9092 --command-config /tmp/client.properties --list >/dev/null 2>&1; do sleep 5; done
+                  for topic in os.eventos.v1 os.retry.v1 os.dlt.v1 billing.eventos.v1 billing.retry.v1 billing.dlt.v1 execucao.eventos.v1 execucao.retry.v1 execucao.dlt.v1; do
+                    kafka-topics.sh --bootstrap-server kafka.kafka.svc.cluster.local:9092 --command-config /tmp/client.properties --create --if-not-exists --topic "$topic" --partitions 3 --replication-factor 3 --config retention.ms=604800000
+                  done

@@ -32,3 +32,8 @@ output "node_security_group_id" {
   description = "Consumed by repo-db-infra to allow Postgres access from EKS nodes"
   value       = module.eks.node_security_group_id
 }
+
+output "ebs_csi_driver_role_arn" {
+  description = "Effective IRSA role ARN for the EBS CSI driver; null in AWS Academy mode"
+  value       = var.aws_academy ? null : (var.manage_iam ? aws_iam_role.ebs_csi_driver[0].arn : var.ebs_csi_driver_role_arn)
+}

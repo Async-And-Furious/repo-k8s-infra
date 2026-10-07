@@ -56,6 +56,22 @@ module "eks" {
     coredns    = {}
     kube-proxy = {}
     vpc-cni    = {}
+    aws-ebs-csi-driver = {
+      most_recent              = true
+      service_account_role_arn = var.aws_academy ? null : (var.manage_iam ? aws_iam_role.ebs_csi_driver[0].arn : var.ebs_csi_driver_role_arn)
+    }
+  }
+
+  node_security_group_enable_recommended_rules = false
+  node_security_group_additional_rules = {
+    egress_vpc = {
+      description = "Allow node egress inside the VPC"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "egress"
+      cidr_blocks = [var.vpc_cidr]
+    }
   }
 
   eks_managed_node_groups = {
@@ -74,6 +90,44 @@ module "eks" {
       iam_role_arn    = var.aws_academy ? var.lab_role_arn : (var.eks_node_role_arn != "" ? var.eks_node_role_arn : null)
     }
   }
+}
+
+data "aws_iam_policy_document" "ebs_csi_driver_assume_role" {
+  count = var.manage_iam && !var.aws_academy ? 1 : 0
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [module.eks.oidc_provider_arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+  }
+}
+
+resource "aws_iam_role" "ebs_csi_driver" {
+  count              = var.manage_iam && !var.aws_academy ? 1 : 0
+  name               = "tc3-eks-${var.environment}-ebs-csi-driver"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_driver_assume_role[0].json
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
+  count      = var.manage_iam && !var.aws_academy ? 1 : 0
+  role       = aws_iam_role.ebs_csi_driver[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
 data "aws_iam_policy_document" "load_balancer_controller_assume_role" {
