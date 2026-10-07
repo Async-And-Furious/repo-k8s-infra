@@ -48,11 +48,12 @@ sasl:
     users:
       - app
   existingSecret: kafka-sasl
-  interBrokerUser: admin
-  controllerUser: controller
+  interbroker:
+    user: admin
+  controller:
+    user: controller
   interBrokerMechanism: plain
   controllerMechanism: plain
-  existingSecret: kafka-sasl
 extraEnvVars:
   - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
     value: "false"
