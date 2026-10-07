@@ -210,6 +210,7 @@ resource "aws_security_group" "node" {
   }
 }
 
+# Nodes are private and only require east-west traffic in the VPC security group.
 resource "aws_security_group_rule" "node" {
   for_each = { for k, v in merge(
     local.efa_security_group_rules,

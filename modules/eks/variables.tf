@@ -99,6 +99,24 @@ variable "load_balancer_controller_role_arn" {
   }
 }
 
+variable "ebs_csi_driver_role_arn" {
+  description = "Existing IAM role ARN for the EBS CSI driver when IAM management is disabled"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.ebs_csi_driver_role_arn == trimspace(var.ebs_csi_driver_role_arn) && (var.ebs_csi_driver_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.ebs_csi_driver_role_arn)))
+    error_message = "ebs_csi_driver_role_arn must be empty or a valid partition-neutral IAM role ARN."
+  }
+}
+
+check "ebs_csi_driver_role_configuration" {
+  assert {
+    condition     = var.manage_iam || var.aws_academy || var.ebs_csi_driver_role_arn != ""
+    error_message = "ebs_csi_driver_role_arn is required and must be non-empty when manage_iam=false outside AWS Academy mode."
+  }
+}
+
 variable "cluster_version" {
   description = "Kubernetes version"
   type        = string
@@ -108,7 +126,7 @@ variable "cluster_version" {
 variable "node_instance_types" {
   description = "EC2 instance types for the managed node group"
   type        = list(string)
-  default     = ["t3.small"]
+  default     = ["t3.medium"]
 }
 
 variable "node_desired_size" {
