@@ -4,7 +4,7 @@ values = Path("kafka-values.yaml").read_text()
 terraform = Path("main.tf").read_text()
 outputs = Path("outputs.tf").read_text()
 
-for expected in ("storageClass: gp3", "size: 20Gi", "protocol: SASL_PLAINTEXT", "enabledMechanisms: PLAIN", "existingSecret: kafka-sasl", "extraDeploy:", "helm.sh/hook: post-install,post-upgrade", "--if-not-exists", "partitions 3", "replication-factor 3"):
+for expected in ("storageClass: gp3", "size: 20Gi", "protocol: SASL_PLAINTEXT", "enabledMechanisms: PLAIN", "- app", "interBrokerUser: admin", "controllerUser: controller", "existingSecret: kafka-sasl", "extraDeploy:", "helm.sh/hook: post-install,post-upgrade", "--if-not-exists", "partitions 3", "replication-factor 3"):
     assert expected in values, expected
 assert "provisioning:" not in values
 assert values.count("--topic \"$topic\"") == 1

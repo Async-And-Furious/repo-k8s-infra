@@ -42,6 +42,8 @@ listeners:
     protocol: SASL_PLAINTEXT
 sasl:
   enabledMechanisms: PLAIN
+  # Application clients use the explicit broker user `app`; inter-broker and
+  # controller identities remain chart-managed and use their own passwords.
   client:
     users:
       - app
