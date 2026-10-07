@@ -136,54 +136,6 @@ resource "kubernetes_storage_class_v1" "gp3" {
   }
 }
 
-data "aws_iam_policy_document" "ebs_csi_driver_assume_role" {
-  count = var.aws_academy || !var.manage_iam ? 0 : 1
-
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-
-    principals {
-      type        = "Federated"
-      identifiers = [module.eks.oidc_provider_arn]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
-    }
-  }
-}
-
-resource "aws_iam_role" "ebs_csi_driver" {
-  count              = var.aws_academy || !var.manage_iam || var.ebs_csi_driver_role_arn != "" ? 0 : 1
-  name               = "tc3-eks-${var.environment}-ebs-csi-driver"
-  assume_role_policy = data.aws_iam_policy_document.ebs_csi_driver_assume_role[0].json
-}
-
-resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
-  count      = var.aws_academy || !var.manage_iam || var.ebs_csi_driver_role_arn != "" ? 0 : 1
-  role       = try(aws_iam_role.ebs_csi_driver[0].name, null)
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
-}
-
-resource "aws_eks_addon" "ebs_csi_driver" {
-  cluster_name                = module.eks.cluster_name
-  addon_name                  = "aws-ebs-csi-driver"
-  service_account_role_arn    = var.aws_academy ? null : (var.ebs_csi_driver_role_arn != "" ? var.ebs_csi_driver_role_arn : try(aws_iam_role.ebs_csi_driver[0].arn, null))
-  resolve_conflicts_on_create = "OVERWRITE"
-  resolve_conflicts_on_update = "OVERWRITE"
-
-  depends_on = [module.eks, aws_iam_role_policy_attachment.ebs_csi_driver]
-}
-
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint

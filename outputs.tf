@@ -39,6 +39,11 @@ output "load_balancer_controller_role_arn" {
   value = module.eks.load_balancer_controller_role_arn
 }
 
+output "ebs_csi_driver_role_arn" {
+  description = "Effective IRSA role ARN used by the EBS CSI driver"
+  value       = module.eks.ebs_csi_driver_role_arn
+}
+
 output "node_security_group_id" {
   description = "Consumed by repo-db-infra's allowed_security_group_ids"
   value       = module.eks.node_security_group_id

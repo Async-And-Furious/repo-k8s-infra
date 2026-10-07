@@ -57,7 +57,8 @@ module "eks" {
     kube-proxy = {}
     vpc-cni    = {}
     aws-ebs-csi-driver = {
-      service_account_role_arn = var.manage_iam ? aws_iam_role.ebs_csi_driver[0].arn : (var.aws_academy ? var.lab_role_arn : var.ebs_csi_driver_role_arn)
+      most_recent              = true
+      service_account_role_arn = var.aws_academy ? null : (var.manage_iam ? aws_iam_role.ebs_csi_driver[0].arn : var.ebs_csi_driver_role_arn)
     }
   }
 

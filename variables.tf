@@ -202,17 +202,6 @@ variable "load_balancer_controller_role_arn" {
   }
 }
 
-variable "ebs_csi_driver_role_arn" {
-  description = "Optional existing IAM role ARN for the EBS CSI driver; leave empty to create an IRSA role"
-  type        = string
-  default     = ""
-
-  validation {
-    condition     = var.ebs_csi_driver_role_arn == trimspace(var.ebs_csi_driver_role_arn) && (var.ebs_csi_driver_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.ebs_csi_driver_role_arn)))
-    error_message = "ebs_csi_driver_role_arn must be empty or a valid partition-neutral IAM role ARN."
-  }
-}
-
 variable "new_relic_license_key" {
   description = "New Relic ingest license key for the Kubernetes infrastructure integration (nri-bundle)"
   type        = string
