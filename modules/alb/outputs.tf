@@ -21,3 +21,13 @@ output "target_group_arn" {
 output "backend_port" {
   value = var.backend_port
 }
+
+output "service_target_group_arns" {
+  description = "Target groups keyed by documented service name."
+  value       = local.service_target_group_arns
+}
+
+output "service_listener_rule_arns" {
+  description = "Listener rules keyed by documented service name."
+  value       = { for name, rule in aws_lb_listener_rule.service : name => rule.arn }
+}
