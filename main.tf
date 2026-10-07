@@ -168,14 +168,14 @@ resource "aws_iam_role" "ebs_csi_driver" {
 
 resource "aws_iam_role_policy_attachment" "ebs_csi_driver" {
   count      = var.aws_academy || !var.manage_iam || var.ebs_csi_driver_role_arn != "" ? 0 : 1
-  role       = aws_iam_role.ebs_csi_driver[0].name
+  role       = try(aws_iam_role.ebs_csi_driver[0].name, null)
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
 
 resource "aws_eks_addon" "ebs_csi_driver" {
   cluster_name                = module.eks.cluster_name
   addon_name                  = "aws-ebs-csi-driver"
-  service_account_role_arn    = var.aws_academy ? null : (var.ebs_csi_driver_role_arn != "" ? var.ebs_csi_driver_role_arn : aws_iam_role.ebs_csi_driver[0].arn)
+  service_account_role_arn    = var.aws_academy ? null : (var.ebs_csi_driver_role_arn != "" ? var.ebs_csi_driver_role_arn : try(aws_iam_role.ebs_csi_driver[0].arn, null))
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 

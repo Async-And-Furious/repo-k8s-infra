@@ -52,6 +52,7 @@ sasl:
   controllerUser: controller
   interBrokerMechanism: plain
   controllerMechanism: plain
+  existingSecret: kafka-sasl
 extraEnvVars:
   - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
     value: "false"
@@ -78,7 +79,7 @@ extraDeploy:
                 - name: KAFKA_CLIENT_PASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: kafka-sasl
+                      name: "{{ .Values.sasl.existingSecret }}"
                       key: client-passwords
               command:
                 - /bin/bash
