@@ -68,8 +68,9 @@ module "internal_alb" {
 resource "aws_security_group_rule" "nodes_from_internal_alb" {
   description              = "Allow the private ALB to reach EKS application pods"
   type                     = "ingress"
-  from_port                = 3000
-  to_port                  = 3000
+  for_each                 = module.internal_alb.service_target_group_ports
+  from_port                = each.value
+  to_port                  = each.value
   protocol                 = "tcp"
   security_group_id        = module.eks.node_security_group_id
   source_security_group_id = module.internal_alb.security_group_id

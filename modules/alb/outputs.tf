@@ -19,12 +19,21 @@ output "target_group_arn" {
 }
 
 output "backend_port" {
-  value = var.backend_port
+  description = "Effective port used by the os target group."
+  value       = aws_lb_target_group.application.port
 }
 
 output "service_target_group_arns" {
   description = "Target groups keyed by documented service name."
   value       = local.service_target_group_arns
+}
+
+output "service_target_group_ports" {
+  description = "Effective target group ports keyed by service name."
+  value = merge(
+    { os = aws_lb_target_group.application.port },
+    { for name, target_group in aws_lb_target_group.service : name => target_group.port },
+  )
 }
 
 output "service_listener_rule_arns" {

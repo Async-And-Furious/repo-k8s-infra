@@ -52,3 +52,10 @@ variable "service_configs" {
     error_message = "service_configs must include os and each service needs a positive port and path pattern."
   }
 }
+
+check "backend_port_matches_os_target_group" {
+  assert {
+    condition     = var.backend_port == var.service_configs.os.port
+    error_message = "backend_port must match the effective os target group port."
+  }
+}
