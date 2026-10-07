@@ -25,7 +25,7 @@ variable "cluster_version" {
 }
 
 variable "node_instance_types" {
-  description = "Optional EC2 instance types for the managed node group; defaults to t3.small for enough pod capacity in HML and production"
+  description = "Optional EC2 instance types for the managed node group; defaults to t3.medium for #313 pod capacity"
   type        = list(string)
   default     = null
 
@@ -175,6 +175,17 @@ variable "load_balancer_controller_role_arn" {
   validation {
     condition     = var.load_balancer_controller_role_arn == trimspace(var.load_balancer_controller_role_arn) && (var.load_balancer_controller_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.load_balancer_controller_role_arn)))
     error_message = "load_balancer_controller_role_arn must be empty or a valid partition-neutral IAM role ARN."
+  }
+}
+
+variable "ebs_csi_driver_role_arn" {
+  description = "Optional existing IAM role ARN for the EBS CSI driver; leave empty to create an IRSA role"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.ebs_csi_driver_role_arn == trimspace(var.ebs_csi_driver_role_arn) && (var.ebs_csi_driver_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.ebs_csi_driver_role_arn)))
+    error_message = "ebs_csi_driver_role_arn must be empty or a valid partition-neutral IAM role ARN."
   }
 }
 

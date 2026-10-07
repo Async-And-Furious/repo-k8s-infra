@@ -34,9 +34,10 @@ nunca fica exposto à internet.
 
 O chart Bitnami Kafka `32.4.3` é instalado em KRaft, com três brokers/controllers,
 PVCs `gp3` de 20Gi, limites explícitos e heap fixado. O listener é interno e
-usa SASL. Antes do apply, o workflow deve materializar o Secret `kafka-sasl` a
-partir de `tc3/kafka/<environment>` no Secrets Manager, com `username` e
-`password`; nenhum valor de credencial é variável Terraform ou arquivo versionado.
+usa SASL/PLAIN. Antes do apply, o workflow deve materializar o Secret
+`kafka-sasl` a partir de `tc3/kafka/<environment>` no Secrets Manager, usando
+as chaves do chart `client-passwords`, `inter-broker-password` e
+`controller-password`; nenhum valor de credencial é versionado.
 
 Os tópicos provisionados são `os.events`, `os.events.retry` e `os.events.dlt`,
 com três partições e retenção de sete dias. Os outputs `kafka_bootstrap_servers`,

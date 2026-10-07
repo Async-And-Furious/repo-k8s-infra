@@ -9,12 +9,12 @@ controller:
   replicaCount: 3
   resources:
     requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
       cpu: 250m
       memory: 512Mi
-    limits:
-      cpu: 1
-      memory: 1Gi
-  heapOpts: "-Xmx512m -Xms512m"
+  heapOpts: "-Xmx256m -Xms256m"
   persistence:
     enabled: true
     storageClass: gp3
@@ -23,32 +23,34 @@ broker:
   replicaCount: 3
   resources:
     requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
       cpu: 500m
       memory: 1Gi
-    limits:
-      cpu: 2
-      memory: 2Gi
-  heapOpts: "-Xmx1Gi -Xms1Gi"
+  heapOpts: "-Xmx512m -Xms512m"
   persistence:
     enabled: true
     storageClass: gp3
     size: 20Gi
 listeners:
   client:
-    protocol: SASL
+    protocol: SASL_PLAINTEXT
   interbroker:
-    protocol: SASL
+    protocol: SASL_PLAINTEXT
   controller:
-    protocol: SASL
+    protocol: SASL_PLAINTEXT
 sasl:
   enabled: true
   client:
     users:
       - app
-    existingSecret: kafka-sasl
-  interBrokerMechanism: scram-sha-256
-  controllerMechanism: scram-sha-256
-  mechanisms: scram-sha-256
+  existingSecret: kafka-sasl
+  interBrokerUser: admin
+  controllerUser: controller
+  interBrokerMechanism: plain
+  controllerMechanism: plain
+  mechanisms: plain
 extraEnvVars:
   - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
     value: "false"
@@ -58,11 +60,17 @@ provisioning:
   replicationFactor: 3
   topics:
     - name: os.events
+      partitions: 3
+      replicationFactor: 3
       config:
         retention.ms: "604800000"
     - name: os.events.retry
+      partitions: 3
+      replicationFactor: 3
       config:
         retention.ms: "604800000"
     - name: os.events.dlt
+      partitions: 3
+      replicationFactor: 3
       config:
         retention.ms: "604800000"
