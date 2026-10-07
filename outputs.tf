@@ -92,6 +92,16 @@ output "application_backend_port" {
   value = module.internal_alb.backend_port
 }
 
+output "service_target_group_arns" {
+  description = "Target groups keyed by os, billing, and execucao service."
+  value       = module.internal_alb.service_target_group_arns
+}
+
+output "service_listener_rule_arns" {
+  description = "ALB listener rules keyed by service."
+  value       = module.internal_alb.service_listener_rule_arns
+}
+
 output "observability_dashboard_url" {
   description = "New Relic dashboard URL for this environment (issue #166)"
   value       = newrelic_one_dashboard.observability.permalink
