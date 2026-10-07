@@ -14,9 +14,9 @@ requiring a Kafka operator or cluster mutation during CI validation.
   deployment workflow; no credential value is committed.
 - Persistent data uses the existing `gp3` StorageClass, 20Gi per broker.
 - Broker requests/limits and JVM heap are explicit and configurable.
-- Topics are declared as Terraform/Helm values: `os.events`,
-  `os.events.retry`, and `os.events.dlt`, with three partitions and seven-day
-  retention. Producers use the retry topic and DLT explicitly.
+- Topics are declared as Terraform/Helm values: `os.eventos.v1`,
+  `billing.eventos.v1`, and `execucao.eventos.v1`, plus each service's
+  `.retry.v1` and `.dlt.v1`, with three partitions and seven-day retention.
 - Terraform exposes the cluster bootstrap endpoint, secret contract name and
   topic names to consuming repositories.
 

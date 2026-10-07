@@ -86,6 +86,36 @@ provider "kubernetes" {
   }
 }
 
+data "aws_secretsmanager_secret_version" "kafka" {
+  secret_id = "tc3/kafka/${var.environment}"
+}
+
+locals {
+  kafka_credentials = jsondecode(data.aws_secretsmanager_secret_version.kafka.secret_string)
+}
+
+resource "kubernetes_namespace_v1" "kafka" {
+  metadata {
+    name = "kafka"
+  }
+}
+
+resource "kubernetes_secret_v1" "kafka_sasl" {
+  depends_on = [module.eks, kubernetes_namespace_v1.kafka]
+
+  metadata {
+    name      = var.kafka_secret_name
+    namespace = kubernetes_namespace_v1.kafka.metadata[0].name
+  }
+
+  type = "Opaque"
+  data = {
+    "client-passwords"      = local.kafka_credentials.password
+    "inter-broker-password" = local.kafka_credentials.password
+    "controller-password"   = local.kafka_credentials.password
+  }
+}
+
 resource "kubernetes_storage_class_v1" "gp3" {
   metadata {
     name = "gp3"
@@ -230,11 +260,11 @@ resource "helm_release" "metrics_server" {
 }
 
 resource "helm_release" "kafka" {
-  depends_on = [module.eks, kubernetes_storage_class_v1.gp3]
+  depends_on = [module.eks, kubernetes_storage_class_v1.gp3, kubernetes_secret_v1.kafka_sasl]
 
   name             = "kafka"
   namespace        = "kafka"
-  create_namespace = true
+  create_namespace = false
   repository       = "https://charts.bitnami.com/bitnami"
   chart            = "kafka"
   version          = "32.4.3"

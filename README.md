@@ -39,8 +39,9 @@ usa SASL/PLAIN. Antes do apply, o workflow deve materializar o Secret
 as chaves do chart `client-passwords`, `inter-broker-password` e
 `controller-password`; nenhum valor de credencial é versionado.
 
-Os tópicos provisionados são `os.events`, `os.events.retry` e `os.events.dlt`,
-com três partições e retenção de sete dias. Os outputs `kafka_bootstrap_servers`,
+Os tópicos provisionados são `os.eventos.v1`, `billing.eventos.v1` e
+`execucao.eventos.v1`, mais os respectivos `<servico>.retry.v1` e
+`<servico>.dlt.v1`, com três partições e retenção de sete dias. Os outputs `kafka_bootstrap_servers`,
 `kafka_secret_name` e `kafka_topics` formam o contrato com a aplicação.
 
 Fora de escopo: regra de negócio, migrations, schema de banco de dados,

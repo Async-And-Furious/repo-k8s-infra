@@ -104,5 +104,9 @@ output "kafka_secret_name" {
 
 output "kafka_topics" {
   description = "Kafka event, retry and dead-letter topics"
-  value       = ["os.events", "os.events.retry", "os.events.dlt"]
+  value = [
+    "os.eventos.v1", "os.retry.v1", "os.dlt.v1",
+    "billing.eventos.v1", "billing.retry.v1", "billing.dlt.v1",
+    "execucao.eventos.v1", "execucao.retry.v1", "execucao.dlt.v1",
+  ]
 }

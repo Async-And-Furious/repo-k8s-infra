@@ -41,7 +41,7 @@ listeners:
   controller:
     protocol: SASL_PLAINTEXT
 sasl:
-  enabled: true
+  enabledMechanisms: PLAIN
   client:
     users:
       - app
@@ -50,27 +50,44 @@ sasl:
   controllerUser: controller
   interBrokerMechanism: plain
   controllerMechanism: plain
-  mechanisms: plain
 extraEnvVars:
   - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
     value: "false"
-provisioning:
-  enabled: true
-  numPartitions: 3
-  replicationFactor: 3
-  topics:
-    - name: os.events
-      partitions: 3
-      replicationFactor: 3
-      config:
-        retention.ms: "604800000"
-    - name: os.events.retry
-      partitions: 3
-      replicationFactor: 3
-      config:
-        retention.ms: "604800000"
-    - name: os.events.dlt
-      partitions: 3
-      replicationFactor: 3
-      config:
-        retention.ms: "604800000"
+extraDeploy:
+  # Bitnami Kafka 32.4.3 does not expose the old provisioning.* values. The
+  # chart's supported extraDeploy hook runs the client-side, idempotent create.
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: kafka-topic-bootstrap
+      namespace: kafka
+      annotations:
+        helm.sh/hook: post-install,post-upgrade
+        helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    spec:
+      backoffLimit: 12
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: topics
+              image: bitnami/kafka:3.9.0-debian-12-r9
+              env:
+                - name: KAFKA_CLIENT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: kafka-sasl
+                      key: client-passwords
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  cat >/tmp/client.properties <<EOF
+                  security.protocol=SASL_PLAINTEXT
+                  sasl.mechanism=PLAIN
+                  sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="app" password="${KAFKA_CLIENT_PASSWORD}";
+                  EOF
+                  until kafka-topics.sh --bootstrap-server kafka.kafka.svc.cluster.local:9092 --command-config /tmp/client.properties --list >/dev/null 2>&1; do sleep 5; done
+                  for topic in os.eventos.v1 os.retry.v1 os.dlt.v1 billing.eventos.v1 billing.retry.v1 billing.dlt.v1 execucao.eventos.v1 execucao.retry.v1 execucao.dlt.v1; do
+                    kafka-topics.sh --bootstrap-server kafka.kafka.svc.cluster.local:9092 --command-config /tmp/client.properties --create --if-not-exists --topic "$topic" --partitions 3 --replication-factor 3 --config retention.ms=604800000
+                  done
