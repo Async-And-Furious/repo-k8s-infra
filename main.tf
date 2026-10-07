@@ -38,6 +38,7 @@ module "eks" {
   node_max_size       = var.node_max_size
   vpc_id              = module.vpc.vpc_id
   private_subnet_ids  = module.vpc.private_subnet_ids
+  vpc_cidr            = var.vpc_cidr
 
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs

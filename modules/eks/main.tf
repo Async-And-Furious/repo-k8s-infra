@@ -58,6 +58,18 @@ module "eks" {
     vpc-cni    = {}
   }
 
+  node_security_group_enable_recommended_rules = false
+  node_security_group_additional_rules = {
+    egress_vpc = {
+      description = "Allow node egress inside the VPC"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "egress"
+      cidr_blocks = [var.vpc_cidr]
+    }
+  }
+
   eks_managed_node_groups = {
     default = {
       instance_types = var.node_instance_types

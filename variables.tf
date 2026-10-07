@@ -13,6 +13,12 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "vpc_cidr" {
+  description = "VPC CIDR used by the private node network"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
 variable "cluster_version" {
   description = "Optional EKS Kubernetes version; leave unset to preserve the version reported by an existing cluster"
   type        = string

@@ -164,15 +164,6 @@ locals {
       type                          = "ingress"
       source_cluster_security_group = true
     }
-    egress_all = {
-      description      = "Allow all egress"
-      protocol         = "-1"
-      from_port        = 0
-      to_port          = 0
-      type             = "egress"
-      cidr_blocks      = ["0.0.0.0/0"]
-      ipv6_cidr_blocks = var.cluster_ip_family == "ipv6" ? ["::/0"] : null
-    }
   } : k => v if var.node_security_group_enable_recommended_rules }
 
   efa_security_group_rules = { for k, v in
@@ -219,8 +210,6 @@ resource "aws_security_group" "node" {
   }
 }
 
-# HML nodes use private subnets plus NAT until endpoint-based egress is implemented.
-#trivy:ignore:AWS-0104:exp:2026-09-30
 resource "aws_security_group_rule" "node" {
   for_each = { for k, v in merge(
     local.efa_security_group_rules,

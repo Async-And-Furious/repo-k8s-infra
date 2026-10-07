@@ -31,6 +31,11 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
+variable "vpc_cidr" {
+  description = "VPC CIDR used to constrain node security group egress"
+  type        = string
+}
+
 variable "cluster_endpoint_public_access" {
   description = "Whether the EKS Kubernetes API endpoint is reachable publicly"
   type        = bool
