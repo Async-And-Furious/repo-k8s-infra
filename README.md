@@ -11,21 +11,43 @@ Em clusters existentes, importe os namespaces antes de aplicar para transferir
 ownership sem conflito.
 
 O ECR é dirigido pela lista `os`, `billing`, `execucao`. Os outputs legados
-`ecr_repository_url`/`ecr_repository_name` continuam apontando para OS, com os
-nomes `tc3-os-<environment>`, `tc3-billing-<environment>` e
-`tc3-execucao-<environment>`. Os mapas `ecr_repository_urls` e
-`ecr_repository_names` expõem todos os serviços. Os `moved` blocks migram os
-endereços Terraform; a troca física de `tc3-app-*` para `tc3-os-*` exige
-migração/retag de imagens e revisão do plan antes de qualquer apply.
+`ecr_repository_url`/`ecr_repository_name` continuam apontando para OS. Os
+nomes são `tc3-os-<environment>`, `tc3-billing-<environment>` e
+`tc3-execucao-<environment>`. Os mapas
+`ecr_repository_urls` e `ecr_repository_names` expõem todos os serviços. Os
+`moved` blocks migram endereços Terraform, mas não copiam imagens.
 
-O padrão de nodes é `t3.medium`; HML usa SPOT e mantém `min <= desired <= max`.
+### Runbook de migração ECR (não destrutivo)
+
+1. Faça `terraform plan` e trate a troca física `tc3-app-*` → `tc3-os-*` como
+   migração explícita. `moved` migra somente o endereço no state; pode haver
+   replacement do repositório físico. Não aplique sem revisar esse plano.
+2. Antes do apply aprovado, copie as imagens sem apagar a origem, usando
+   credenciais já configuradas e sem imprimir tokens:
+
+   ```bash
+   aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
+   docker pull "$SOURCE_REPOSITORY:$TAG"
+   docker tag "$SOURCE_REPOSITORY:$TAG" "$TARGET_REPOSITORY:$TAG"
+   docker push "$TARGET_REPOSITORY:$TAG"
+   ```
+
+   Repita para cada tag aprovada (ou use uma ferramenta de cópia revisada),
+   conferindo os digests com `aws ecr describe-images`.
+3. Rode novamente `terraform plan`, revise nomes, lifecycle e qualquer
+   replacement/deleção. Só então obtenha aprovação separada para
+   `terraform apply`; `force_delete` deve permanecer desativado.
+   Este runbook não remove repositórios/imagens nem habilita deleção automática.
+
+O contrato de HML é explícito: `t3.medium`, SPOT, `min=2`, `desired=3`, `max=3`.
+Ele mantém `min <= desired <= max`; não usar `t3.large` nesta entrega.
 O EBS CSI usa IRSA com IAM gerenciado, e a StorageClass `gp3` é criptografada e
 usa `WaitForFirstConsumer`. AWS Academy não suporta esse caminho de OIDC/IRSA:
 registre o spike e o bloqueio, sem credenciais estáticas ou acesso público.
 
-O gate somente leitura está em `scripts/capacity-gate.sh`: `g1` mede requests,
-`g2` só imprime o plano de drain salvo confirmação explícita, e `g3` valida
-seletor/métricas e imprime a evidência necessária. Kafka, deployments e carga
+O gate está em `scripts/capacity-gate.sh`: `g1` mede requests e falha acima de
+70%, `g2` é somente plano por padrão e restaura o node após execução explícita,
+e `g3` só executa carga com confirmação explícita. Kafka, deployments e carga
 não são instalados/executados por esta entrega; consulte ADR-0020.
 
 O módulo EKS também faz o bootstrap do AWS Load Balancer Controller (incluindo

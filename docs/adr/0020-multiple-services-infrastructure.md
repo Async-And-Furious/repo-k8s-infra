@@ -7,11 +7,12 @@
 - Cada serviço recebe apenas um `LimitRange` com request padrão `100m/128Mi` e
   limit `500m/512Mi`. Não há `ResourceQuota` nem `NetworkPolicy`; portanto os
   serviços devem validar JWT localmente.
-- ECR usa `for_each` para `os`, `billing` e `execucao`, com nomes `tc3-os-*`,
-  `tc3-billing-*` e `tc3-execucao-*`. Os `moved` blocks migram os endereços
-  Terraform; a troca física de `tc3-app-*` para `tc3-os-*` exige
-  migração/retag de imagens e revisão do plan antes de qualquer apply.
-- O padrão é `t3.medium`; HML usa SPOT e a ordem de capacidade é
+- ECR usa `for_each` para `os`, `billing` e `execucao`, com nomes
+  `tc3-os-*`, `tc3-billing-*` e `tc3-execucao-*`. Os `moved` blocks migram
+  endereços Terraform, mas não copiam imagens nem renomeiam o repositório físico;
+  a troca de `tc3-app-*` exige cópia/retag manual, plan e aprovação antes de
+  apply.
+- HML usa `t3.medium` SPOT com `min=2`, `desired=3`, `max=3`; a ordem é
   `min <= desired <= max`. O addon EBS CSI usa IRSA e `AmazonEBSCSIDriverPolicy`
   quando IAM é gerenciado; Academy não cria OIDC/IRSA e esse bloqueio deve ser
   resolvido por spike aprovado, nunca por credencial estática ou acesso público.
