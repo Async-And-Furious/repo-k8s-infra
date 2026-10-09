@@ -15,6 +15,12 @@ variable "manage_iam" {
   default     = true
 }
 
+variable "create_ebs_csi_irsa_role" {
+  description = "Create EBS CSI IRSA when IAM is managed"
+  type        = bool
+  default     = false
+}
+
 variable "lab_role_arn" {
   description = "Existing LabRole ARN for Academy mode"
   type        = string
@@ -103,7 +109,7 @@ variable "cluster_version" {
 variable "node_instance_types" {
   description = "EC2 instance types for the managed node group"
   type        = list(string)
-  default     = ["t3.small"]
+  default     = ["t3.medium"]
 }
 
 variable "node_desired_size" {

@@ -47,7 +47,8 @@ module "eks" {
   vpc_id     = var.vpc_id
   subnet_ids = var.private_subnet_ids
 
-  enable_irsa = var.manage_iam && !var.aws_academy
+  enable_irsa              = var.manage_iam && !var.aws_academy
+  create_ebs_csi_irsa_role = var.create_ebs_csi_irsa_role
 
   create_iam_role = var.manage_iam && !var.aws_academy && var.eks_cluster_role_arn == ""
   iam_role_arn    = var.aws_academy ? var.lab_role_arn : (var.eks_cluster_role_arn != "" ? var.eks_cluster_role_arn : null)
@@ -56,6 +57,9 @@ module "eks" {
     coredns    = {}
     kube-proxy = {}
     vpc-cni    = {}
+    aws-ebs-csi-driver = {
+      service_account_role_arn = null
+    }
   }
 
   eks_managed_node_groups = {

@@ -53,6 +53,26 @@ output "ecr_repository_name" {
   value       = module.ecr.repository_name
 }
 
+output "ecr_repository_urls" {
+  description = "ECR URLs keyed by service"
+  value       = module.ecr.repository_urls
+}
+
+output "ecr_repository_names" {
+  description = "ECR names keyed by service"
+  value       = module.ecr.repository_names
+}
+
+moved {
+  from = module.ecr.aws_ecr_repository.app
+  to   = module.ecr.aws_ecr_repository.service["os"]
+}
+
+moved {
+  from = module.ecr.aws_ecr_lifecycle_policy.app
+  to   = module.ecr.aws_ecr_lifecycle_policy.service["os"]
+}
+
 output "internal_alb_arn" {
   description = "Internal ALB ARN consumed by the API Gateway integration contract"
   value       = module.internal_alb.arn

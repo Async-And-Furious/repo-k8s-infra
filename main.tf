@@ -17,7 +17,7 @@ provider "newrelic" {
 }
 
 locals {
-  node_instance_types = coalesce(var.node_instance_types, ["t3.small"])
+  node_instance_types = coalesce(var.node_instance_types, ["t3.medium"])
   new_relic_app_name  = "async-furious-project-${var.environment}"
 }
 
@@ -43,6 +43,7 @@ module "eks" {
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
   aws_academy                          = var.aws_academy
   manage_iam                           = var.manage_iam
+  create_ebs_csi_irsa_role             = var.manage_iam && !var.aws_academy
   lab_role_arn                         = var.lab_role_arn
   eks_cluster_role_arn                 = var.eks_cluster_role_arn
   eks_node_role_arn                    = var.eks_node_role_arn
@@ -54,6 +55,7 @@ module "ecr" {
 
   environment  = var.environment
   force_delete = var.aws_academy && var.environment == "hml"
+  services     = var.ecr_service_names
 }
 
 module "internal_alb" {
@@ -86,6 +88,54 @@ provider "helm" {
       args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
     }
   }
+}
+
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+  }
+}
+
+resource "kubernetes_namespace_v1" "managed" {
+  for_each = toset(["async-furious", "billing", "execucao", "platform"])
+
+  metadata { name = each.key }
+}
+
+resource "kubernetes_limit_range_v1" "service" {
+  for_each = toset(["async-furious", "billing", "execucao"])
+
+  metadata {
+    name      = "service-defaults"
+    namespace = kubernetes_namespace_v1.managed[each.key].metadata[0].name
+  }
+
+  spec {
+    limit {
+      type            = "Container"
+      default         = { cpu = "500m", memory = "512Mi" }
+      default_request = { cpu = "100m", memory = "128Mi" }
+    }
+  }
+}
+
+resource "kubernetes_storage_class_v1" "gp3" {
+  metadata {
+    name = "gp3"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy         = "Delete"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+  parameters             = { type = "gp3", encrypted = "true" }
 }
 
 resource "helm_release" "aws_load_balancer_controller" {

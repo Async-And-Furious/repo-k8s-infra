@@ -493,7 +493,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          repository_name="tc3-app-$ENVIRONMENT"
+           repository_name="tc3-os-$ENVIRONMENT"
           next_token=""
           while :; do
             response_file="$(mktemp)"

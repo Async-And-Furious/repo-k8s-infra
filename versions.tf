@@ -11,6 +11,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.17"
     }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.31"
+    }
     newrelic = {
       source  = "newrelic/newrelic"
       version = "~> 3.0"

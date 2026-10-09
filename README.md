@@ -1,6 +1,32 @@
 # repo-k8s-infra
 
-Tech Challenge Fase 3 — VPC, EKS e ECR via Terraform.
+Tech Challenge Fase 3/4 — VPC, EKS e ECR via Terraform.
+
+## Base para múltiplos serviços (#313)
+
+O Terraform mantém `async-furious` e cria `billing`, `execucao` e `platform`.
+Os três namespaces de serviço recebem `LimitRange` com requests padrão
+`100m/128Mi` e limits `500m/512Mi`; não são criados quotas ou NetworkPolicies.
+Em clusters existentes, importe os namespaces antes de aplicar para transferir
+ownership sem conflito.
+
+O ECR é dirigido pela lista `os`, `billing`, `execucao`. Os outputs legados
+`ecr_repository_url`/`ecr_repository_name` continuam apontando para OS, com os
+nomes `tc3-os-<environment>`, `tc3-billing-<environment>` e
+`tc3-execucao-<environment>`. Os mapas `ecr_repository_urls` e
+`ecr_repository_names` expõem todos os serviços. Os `moved` blocks migram os
+endereços Terraform; a troca física de `tc3-app-*` para `tc3-os-*` exige
+migração/retag de imagens e revisão do plan antes de qualquer apply.
+
+O padrão de nodes é `t3.medium`; HML usa SPOT e mantém `min <= desired <= max`.
+O EBS CSI usa IRSA com IAM gerenciado, e a StorageClass `gp3` é criptografada e
+usa `WaitForFirstConsumer`. AWS Academy não suporta esse caminho de OIDC/IRSA:
+registre o spike e o bloqueio, sem credenciais estáticas ou acesso público.
+
+O gate somente leitura está em `scripts/capacity-gate.sh`: `g1` mede requests,
+`g2` só imprime o plano de drain salvo confirmação explícita, e `g3` valida
+seletor/métricas e imprime a evidência necessária. Kafka, deployments e carga
+não são instalados/executados por esta entrega; consulte ADR-0020.
 
 O módulo EKS também faz o bootstrap do AWS Load Balancer Controller (incluindo
 sua CRD TargetGroupBinding) e do Metrics Server, com versões fixas de chart
@@ -11,7 +37,7 @@ O AWS Load Balancer Controller usa o role IRSA criado pelo Terraform (com
 Kubernetes é privada por padrão; defina
 `cluster_endpoint_public_access=true` somente quando necessário e forneça no
 máximo 40 entradas restritas em `cluster_endpoint_public_access_cidrs`.
-O node group gerenciado usa um único tipo de instância, `t3.small` por padrão
+O node group gerenciado usa um único tipo de instância, `t3.medium` por padrão
 (`node_instance_types = null` no root, resolvido por `coalesce`). Evitar uma
 lista de tipos impede que o EKS substitua o node group e sobreponha nós
 temporariamente, o que pode exceder a quota de vCPU da conta. A escala padrão

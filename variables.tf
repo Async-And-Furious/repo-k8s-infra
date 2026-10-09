@@ -25,7 +25,7 @@ variable "cluster_version" {
 }
 
 variable "node_instance_types" {
-  description = "Optional EC2 instance types for the managed node group; defaults to t3.small for enough pod capacity in HML and production"
+  description = "Optional EC2 instance types for the managed node group; defaults to t3.medium"
   type        = list(string)
   default     = null
 
@@ -35,6 +35,17 @@ variable "node_instance_types" {
       alltrue([for instance_type in var.node_instance_types : trimspace(instance_type) != ""])
     )
     error_message = "node_instance_types must be null or a non-empty list of instance types."
+  }
+}
+
+variable "ecr_service_names" {
+  description = "Services that receive immutable ECR repositories"
+  type        = set(string)
+  default     = ["os", "billing", "execucao"]
+
+  validation {
+    condition     = contains(var.ecr_service_names, "os") && alltrue([for service in var.ecr_service_names : can(regex("^[a-z0-9][a-z0-9-]*$", service))])
+    error_message = "ecr_service_names must include os and contain only lowercase repository-safe names."
   }
 }
 
