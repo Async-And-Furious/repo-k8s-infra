@@ -85,20 +85,21 @@ g3() {
   max_restarts=$baseline
   end=$(( $(date +%s) + 300 ))
   sh -c "$load_command" & load_pid=$!
-  while [ "$(date +%s)" -lt "$end" ]; do
+  sample_broker() {
     current=$(kubectl top pod "$broker" -n "$namespace" --no-headers --containers | awk '{print $4}' | while read -r m; do quantity_mi "$m"; done | awk '{ total += $1 } END { print total + 0 }')
     [ "$(awk -v a="$current" -v b="$max_working_set" 'BEGIN { print (a > b) ? 1 : 0 }')" -eq 1 ] && max_working_set=$current
     restarts=$(kubectl get pod "$broker" -n "$namespace" -o json | jq '[.status.containerStatuses[]?.restartCount] | add // 0')
     [ "$restarts" -gt "$max_restarts" ] && max_restarts=$restarts
+    :
+  }
+  while [ "$(date +%s)" -lt "$end" ]; do
+    sample_broker
     sleep 30
   done
   wait "$load_pid" || true
   observation_end=$(( $(date +%s) + 1800 ))
   while [ "$(date +%s)" -lt "$observation_end" ]; do
-    current=$(kubectl top pod "$broker" -n "$namespace" --no-headers --containers | awk '{print $4}' | while read -r m; do quantity_mi "$m"; done | awk '{ total += $1 } END { print total + 0 }')
-    [ "$(awk -v a="$current" -v b="$max_working_set" 'BEGIN { print (a > b) ? 1 : 0 }')" -eq 1 ] && max_working_set=$current
-    restarts=$(kubectl get pod "$broker" -n "$namespace" -o json | jq '[.status.containerStatuses[]?.restartCount] | add // 0')
-    [ "$restarts" -gt "$max_restarts" ] && max_restarts=$restarts
+    sample_broker
     sleep 30
   done
   final=$(kubectl get pod "$broker" -n "$namespace" -o json | jq '[.status.containerStatuses[]?.restartCount] | add // 0')
