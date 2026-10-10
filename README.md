@@ -78,6 +78,20 @@ contratos de integração do Auth/API Gateway e do deployment da aplicação. O
 deployment da aplicação registra os IPs dos pods nesse target group; o ALB
 nunca fica exposto à internet.
 
+## Kafka
+
+O chart Bitnami Kafka `32.4.3` é instalado em KRaft, com três brokers/controllers,
+PVCs `gp3` de 20Gi, limites explícitos e heap fixado. O listener é interno e
+usa SASL/PLAIN. Antes do apply, o workflow deve materializar o Secret
+`kafka-sasl` a partir de `tc3/kafka/<environment>` no Secrets Manager, usando
+as chaves do chart `client-passwords`, `inter-broker-password` e
+`controller-password`; nenhum valor de credencial é versionado.
+
+Os tópicos provisionados são `os.eventos.v1`, `billing.eventos.v1` e
+`execucao.eventos.v1`, mais os respectivos `<servico>.retry.v1` e
+`<servico>.dlt.v1`, com três partições e retenção de sete dias. Os outputs `kafka_bootstrap_servers`,
+`kafka_secret_name` e `kafka_topics` formam o contrato com a aplicação.
+
 Fora de escopo: regra de negócio, migrations, schema de banco de dados,
 código das Lambdas.
 

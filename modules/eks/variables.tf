@@ -15,12 +15,6 @@ variable "manage_iam" {
   default     = true
 }
 
-variable "create_ebs_csi_irsa_role" {
-  description = "Create EBS CSI IRSA when IAM is managed"
-  type        = bool
-  default     = false
-}
-
 variable "lab_role_arn" {
   description = "Existing LabRole ARN for Academy mode"
   type        = string
@@ -35,6 +29,11 @@ variable "vpc_id" {
 variable "private_subnet_ids" {
   description = "Private subnet ids from the vpc module (nodes and internal load balancers)"
   type        = list(string)
+}
+
+variable "vpc_cidr" {
+  description = "VPC CIDR used to constrain node security group egress"
+  type        = string
 }
 
 variable "cluster_endpoint_public_access" {
@@ -97,6 +96,24 @@ variable "load_balancer_controller_role_arn" {
   validation {
     condition     = var.load_balancer_controller_role_arn == trimspace(var.load_balancer_controller_role_arn) && (var.load_balancer_controller_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.load_balancer_controller_role_arn)))
     error_message = "load_balancer_controller_role_arn must be empty or a valid partition-neutral IAM role ARN."
+  }
+}
+
+variable "ebs_csi_driver_role_arn" {
+  description = "Existing IAM role ARN for the EBS CSI driver when IAM management is disabled"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.ebs_csi_driver_role_arn == trimspace(var.ebs_csi_driver_role_arn) && (var.ebs_csi_driver_role_arn == "" || can(regex("^arn:[^:]+:iam::[0-9]{12}:role/.+$", var.ebs_csi_driver_role_arn)))
+    error_message = "ebs_csi_driver_role_arn must be empty or a valid partition-neutral IAM role ARN."
+  }
+}
+
+check "ebs_csi_driver_role_configuration" {
+  assert {
+    condition     = var.manage_iam || var.aws_academy || var.ebs_csi_driver_role_arn != ""
+    error_message = "ebs_csi_driver_role_arn is required and must be non-empty when manage_iam=false outside AWS Academy mode."
   }
 }
 

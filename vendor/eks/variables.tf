@@ -564,12 +564,6 @@ variable "cluster_addons" {
   default     = {}
 }
 
-variable "create_ebs_csi_irsa_role" {
-  description = "Create an IRSA role for the EBS CSI addon"
-  type        = bool
-  default     = false
-}
-
 variable "cluster_addons_timeouts" {
   description = "Create, update, and delete timeout configurations for the cluster addons"
   type        = map(string)

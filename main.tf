@@ -38,16 +38,17 @@ module "eks" {
   node_max_size       = var.node_max_size
   vpc_id              = module.vpc.vpc_id
   private_subnet_ids  = module.vpc.private_subnet_ids
+  vpc_cidr            = var.vpc_cidr
 
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
   aws_academy                          = var.aws_academy
   manage_iam                           = var.manage_iam
-  create_ebs_csi_irsa_role             = var.manage_iam && !var.aws_academy
   lab_role_arn                         = var.lab_role_arn
   eks_cluster_role_arn                 = var.eks_cluster_role_arn
   eks_node_role_arn                    = var.eks_node_role_arn
   load_balancer_controller_role_arn    = var.load_balancer_controller_role_arn
+  ebs_csi_driver_role_arn              = var.ebs_csi_driver_role_arn
 }
 
 module "ecr" {
@@ -70,11 +71,71 @@ module "internal_alb" {
 resource "aws_security_group_rule" "nodes_from_internal_alb" {
   description              = "Allow the private ALB to reach EKS application pods"
   type                     = "ingress"
-  from_port                = 3000
-  to_port                  = 3000
+  for_each                 = module.internal_alb.service_target_group_ports
+  from_port                = each.value
+  to_port                  = each.value
   protocol                 = "tcp"
   security_group_id        = module.eks.node_security_group_id
   source_security_group_id = module.internal_alb.security_group_id
+}
+
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+  }
+}
+
+data "aws_secretsmanager_secret_version" "kafka" {
+  secret_id = "tc3/kafka/${var.environment}"
+}
+
+locals {
+  kafka_credentials = jsondecode(data.aws_secretsmanager_secret_version.kafka.secret_string)
+}
+
+resource "kubernetes_namespace_v1" "kafka" {
+  metadata {
+    name = "kafka"
+  }
+}
+
+resource "kubernetes_secret_v1" "kafka_sasl" {
+  depends_on = [module.eks, kubernetes_namespace_v1.kafka]
+
+  metadata {
+    name      = var.kafka_secret_name
+    namespace = kubernetes_namespace_v1.kafka.metadata[0].name
+  }
+
+  type = "Opaque"
+  data = {
+    "client-passwords"      = local.kafka_credentials.password
+    "inter-broker-password" = local.kafka_credentials.password
+    "controller-password"   = local.kafka_credentials.password
+  }
+}
+
+resource "kubernetes_storage_class_v1" "gp3" {
+  metadata {
+    name = "gp3"
+    annotations = {
+      "storageclass.kubernetes.io/is-default-class" = "true"
+    }
+  }
+  storage_provisioner    = "ebs.csi.aws.com"
+  reclaim_policy         = "Delete"
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = true
+  parameters = {
+    type      = "gp3"
+    fsType    = "ext4"
+    encrypted = "true"
+  }
 }
 
 provider "helm" {
@@ -87,17 +148,6 @@ provider "helm" {
       command     = "aws"
       args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
     }
-  }
-}
-
-provider "kubernetes" {
-  host                   = module.eks.cluster_endpoint
-  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
-
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
   }
 }
 
@@ -122,20 +172,6 @@ resource "kubernetes_limit_range_v1" "service" {
       default_request = { cpu = "100m", memory = "128Mi" }
     }
   }
-}
-
-resource "kubernetes_storage_class_v1" "gp3" {
-  metadata {
-    name = "gp3"
-    annotations = {
-      "storageclass.kubernetes.io/is-default-class" = "true"
-    }
-  }
-  storage_provisioner    = "ebs.csi.aws.com"
-  reclaim_policy         = "Delete"
-  volume_binding_mode    = "WaitForFirstConsumer"
-  allow_volume_expansion = true
-  parameters             = { type = "gp3", encrypted = "true" }
 }
 
 resource "helm_release" "aws_load_balancer_controller" {
@@ -200,6 +236,24 @@ resource "helm_release" "metrics_server" {
   repository       = "https://kubernetes-sigs.github.io/metrics-server/"
   chart            = "metrics-server"
   version          = "3.12.2"
+}
+
+resource "helm_release" "kafka" {
+  depends_on = [module.eks, kubernetes_storage_class_v1.gp3, kubernetes_secret_v1.kafka_sasl]
+
+  name             = "kafka"
+  namespace        = "kafka"
+  create_namespace = false
+  repository       = "https://charts.bitnami.com/bitnami"
+  chart            = "kafka"
+  version          = "32.4.3"
+  values           = [file("${path.module}/kafka-values.yaml")]
+
+  # The workflow materializes this Secret from Secrets Manager before apply.
+  set {
+    name  = "sasl.existingSecret"
+    value = var.kafka_secret_name
+  }
 }
 
 # New Relic Kubernetes integration (issue #163). Minimal footprint on purpose:

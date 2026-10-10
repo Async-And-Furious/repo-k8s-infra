@@ -431,42 +431,6 @@ resource "aws_iam_openid_connect_provider" "oidc_provider" {
   )
 }
 
-data "aws_iam_policy_document" "ebs_csi_assume_role" {
-  count = var.create_ebs_csi_irsa_role ? 1 : 0
-
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.oidc_provider[0].arn]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(aws_eks_cluster.this[0].identity[0].oidc[0].issuer, "https://", "")}:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(aws_eks_cluster.this[0].identity[0].oidc[0].issuer, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
-    }
-  }
-}
-
-resource "aws_iam_role" "ebs_csi" {
-  count               = var.create_ebs_csi_irsa_role ? 1 : 0
-  name                = "${var.cluster_name}-ebs-csi"
-  assume_role_policy  = data.aws_iam_policy_document.ebs_csi_assume_role[0].json
-  managed_policy_arns = ["arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"]
-}
-
-locals {
-  cluster_addons_with_irsa = merge(var.cluster_addons, var.create_ebs_csi_irsa_role ? {
-    aws-ebs-csi-driver = { service_account_role_arn = aws_iam_role.ebs_csi[0].arn }
-  } : {})
-}
-
 ################################################################################
 # IAM Role
 ################################################################################
@@ -765,7 +729,7 @@ locals {
 }
 
 data "aws_eks_addon_version" "this" {
-  for_each = { for k, v in local.cluster_addons_with_irsa : k => v if local.create && !local.create_outposts_local_cluster }
+  for_each = { for k, v in var.cluster_addons : k => v if local.create && !local.create_outposts_local_cluster }
 
   addon_name         = try(each.value.name, each.key)
   kubernetes_version = coalesce(var.cluster_version, aws_eks_cluster.this[0].version)
@@ -775,7 +739,7 @@ data "aws_eks_addon_version" "this" {
 
 resource "aws_eks_addon" "this" {
   # Not supported on outposts
-  for_each = { for k, v in local.cluster_addons_with_irsa : k => v if !try(v.before_compute, false) && local.create && !local.create_outposts_local_cluster }
+  for_each = { for k, v in var.cluster_addons : k => v if !try(v.before_compute, false) && local.create && !local.create_outposts_local_cluster }
 
   cluster_name = aws_eks_cluster.this[0].id
   addon_name   = try(each.value.name, each.key)
@@ -813,7 +777,7 @@ resource "aws_eks_addon" "this" {
 
 resource "aws_eks_addon" "before_compute" {
   # Not supported on outposts
-  for_each = { for k, v in local.cluster_addons_with_irsa : k => v if try(v.before_compute, false) && local.create && !local.create_outposts_local_cluster }
+  for_each = { for k, v in var.cluster_addons : k => v if try(v.before_compute, false) && local.create && !local.create_outposts_local_cluster }
 
   cluster_name = aws_eks_cluster.this[0].id
   addon_name   = try(each.value.name, each.key)
