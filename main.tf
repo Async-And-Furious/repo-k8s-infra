@@ -56,6 +56,7 @@ module "ecr" {
 
   environment  = var.environment
   force_delete = var.aws_academy && var.environment == "hml"
+  services     = var.ecr_service_names
 }
 
 module "internal_alb" {
@@ -146,6 +147,29 @@ provider "helm" {
       api_version = "client.authentication.k8s.io/v1beta1"
       command     = "aws"
       args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name, "--region", var.aws_region]
+    }
+  }
+}
+
+resource "kubernetes_namespace_v1" "managed" {
+  for_each = toset(["async-furious", "billing", "execucao", "platform"])
+
+  metadata { name = each.key }
+}
+
+resource "kubernetes_limit_range_v1" "service" {
+  for_each = toset(["async-furious", "billing", "execucao"])
+
+  metadata {
+    name      = "service-defaults"
+    namespace = kubernetes_namespace_v1.managed[each.key].metadata[0].name
+  }
+
+  spec {
+    limit {
+      type            = "Container"
+      default         = { cpu = "500m", memory = "512Mi" }
+      default_request = { cpu = "100m", memory = "128Mi" }
     }
   }
 }

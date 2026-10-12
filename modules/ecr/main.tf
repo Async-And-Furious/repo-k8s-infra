@@ -1,5 +1,6 @@
-resource "aws_ecr_repository" "app" {
-  name                 = "tc3-app-${var.environment}"
+resource "aws_ecr_repository" "service" {
+  for_each             = var.services
+  name                 = "tc3-${each.key}-${var.environment}"
   image_tag_mutability = "IMMUTABLE"
   force_delete         = var.force_delete
 
@@ -8,8 +9,9 @@ resource "aws_ecr_repository" "app" {
   }
 }
 
-resource "aws_ecr_lifecycle_policy" "app" {
-  repository = aws_ecr_repository.app.name
+resource "aws_ecr_lifecycle_policy" "service" {
+  for_each   = var.services
+  repository = aws_ecr_repository.service[each.key].name
 
   policy = jsonencode({
     rules = [{

@@ -8,3 +8,9 @@ variable "force_delete" {
   type        = bool
   default     = false
 }
+
+variable "services" {
+  description = "Service keys with stable ECR repositories"
+  type        = set(string)
+  default     = ["os", "billing", "execucao"]
+}

@@ -44,6 +44,17 @@ variable "node_instance_types" {
   }
 }
 
+variable "ecr_service_names" {
+  description = "Services that receive immutable ECR repositories"
+  type        = set(string)
+  default     = ["os", "billing", "execucao"]
+
+  validation {
+    condition     = contains(var.ecr_service_names, "os") && alltrue([for service in var.ecr_service_names : can(regex("^[a-z0-9][a-z0-9-]*$", service))])
+    error_message = "ecr_service_names must include os and contain only lowercase repository-safe names."
+  }
+}
+
 variable "node_desired_size" {
   description = "Managed node group desired capacity for HML and production"
   type        = number

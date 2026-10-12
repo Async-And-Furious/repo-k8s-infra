@@ -1,5 +1,14 @@
 # Log do agente
 
+## 2026-10-08 (issue #313)
+
+- Preparados namespaces, LimitRanges, ECR por serviço, EBS CSI/IRSA, StorageClass
+  gp3 e harness seguro G1-G3.
+- Registrados ownership/import, limitação de IRSA no Academy e itens fora de
+  escopo em ADR-0020 e README.
+- Nenhum apply/destroy Terraform, alteração Kubernetes, instalação Kafka ou
+  load test foi executado.
+
 ## 2026-09-14 (runner de CI privado para o EKS)
 
 - Movidos os jobs normais de plan/apply do Terraform em HML e produção para o
