@@ -17,7 +17,7 @@ variable "backend_port" {
 
 variable "health_check_path" {
   type    = string
-  default = "/"
+  default = "/api/v1/health/live"
 }
 
 variable "service_configs" {
@@ -34,14 +34,19 @@ variable "service_configs" {
       path_patterns     = ["/api/v1/*"]
     }
     billing = {
-      port              = 3001
-      health_check_path = "/health"
-      path_patterns     = ["/billing/*"]
+      port              = 3000
+      health_check_path = "/api/v1/health/live"
+      path_patterns = [
+        "/api/v1/orcamentos*",
+        "/api/v1/pagamentos*",
+        "/api/v1/webhooks/mercado-pago",
+        "/api/docs/billing*",
+      ]
     }
     execucao = {
-      port              = 3002
-      health_check_path = "/health"
-      path_patterns     = ["/execucao/*"]
+      port              = 3000
+      health_check_path = "/api/v1/health/live"
+      path_patterns     = ["/api/v1/execucoes*", "/api/docs/execucao*"]
     }
   }
 

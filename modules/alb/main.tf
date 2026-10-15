@@ -88,10 +88,10 @@ resource "aws_lb_listener" "http" {
 }
 
 resource "aws_lb_listener_rule" "service" {
-  for_each = var.service_configs
+  for_each = local.additional_services
 
   listener_arn = aws_lb_listener.http.arn
-  priority     = index(sort(keys(var.service_configs)), each.key) + 1
+  priority     = index(sort(keys(local.additional_services)), each.key) + 1
 
   action {
     type             = "forward"

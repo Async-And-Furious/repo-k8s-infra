@@ -17,6 +17,12 @@
   quando IAM é gerenciado; Academy não cria OIDC/IRSA e esse bloqueio deve ser
   resolvido por spike aprovado, nunca por credencial estática ou acesso público.
 - `gp3` é criptografado e usa `WaitForFirstConsumer`.
+- O ALB é interno. `os`, `billing` e `execucao` usam target groups IP na porta
+  `3000` e health check `/api/v1/health/live`; `os` permanece na ação padrão.
+  As regras de billing cobrem `/api/v1/orcamentos*`, `/api/v1/pagamentos*`,
+  `/api/v1/webhooks/mercado-pago` e `/api/docs/billing*`; execução cobre
+  `/api/v1/execucoes*` e `/api/docs/execucao*`. Os mapas de outputs e aliases
+  legados permanecem compatíveis.
 
 ## Gate G1–G3
 
@@ -29,5 +35,5 @@ e eventual degrau aplicado.
 
 ## Fora de escopo
 
-Deployments, chart/imagem Kafka, regras de edge, bancos, NetworkPolicy,
+Deployments, chart/imagem Kafka, bancos, NetworkPolicy,
 ResourceQuota, instalação Kafka, load test e qualquer apply/destroy de produção.
