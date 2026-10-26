@@ -446,14 +446,20 @@ jobs:
       - name: Terraform plan
         if: env.ACTION == 'plan' || env.ACTION == 'apply'
         run: terraform plan -input=false -out=tfplan
-      - name: Save Terraform plan artifact
+      # Saved plan files can contain sensitive values even when Terraform masks
+      # them in text output. This repository is public, so never upload tfplan.
+      # Publish only addresses and action types; the apply job creates its own plan.
+      - name: Summarize Terraform plan without values
         if: env.ACTION == 'plan' || env.ACTION == 'apply'
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan-${{ env.ENVIRONMENT }}-${{ github.run_id }}
-          path: tfplan
-          if-no-files-found: error
-          retention-days: 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform show -json tfplan | jq -r '
+            [.resource_changes[]? | select(.change.actions != ["no-op"])] as $changes
+            | "### Terraform plan resource summary (values omitted)",
+              "Resource changes: \($changes | length)",
+              ($changes[]? | "- `\(.address)` — \(.change.actions | join(", "))")
+          ' >> "$GITHUB_STEP_SUMMARY"
       - name: Terraform destroy plan
         if: (env.ACTION == 'destroy-plan' || env.ACTION == 'destroy') && env.DESTROY_HAS_STATE == 'true'
         run: terraform plan -destroy -input=false -out=destroy.tfplan
