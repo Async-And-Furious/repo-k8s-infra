@@ -229,13 +229,13 @@ resource "helm_release" "metrics_server" {
   version          = "3.12.2"
 }
 
+# Bitnami serves its charts only from the OCI registry now.
 resource "helm_release" "kafka" {
   depends_on = [module.eks, kubernetes_storage_class_v1.gp3, kubernetes_secret_v1.kafka_sasl]
 
   name             = "kafka"
   namespace        = "kafka"
   create_namespace = false
-  # Bitnami serves its charts only from the OCI registry now.
   repository       = "oci://registry-1.docker.io/bitnamicharts"
   chart            = "kafka"
   version          = "32.4.3"
