@@ -47,18 +47,24 @@ module "eks" {
   vpc_id     = var.vpc_id
   subnet_ids = var.private_subnet_ids
 
-  enable_irsa = var.manage_iam && !var.aws_academy
+  # The AWS-managed SCP of new-experience accounts denies iam:*Provider*, so the
+  # IRSA OIDC provider cannot be created; add-on roles use EKS Pod Identity.
+  enable_irsa = false
 
   create_iam_role = var.manage_iam && !var.aws_academy && var.eks_cluster_role_arn == ""
   iam_role_arn    = var.aws_academy ? var.lab_role_arn : (var.eks_cluster_role_arn != "" ? var.eks_cluster_role_arn : null)
 
   cluster_addons = {
-    coredns    = {}
-    kube-proxy = {}
-    vpc-cni    = {}
+    coredns                = {}
+    kube-proxy             = {}
+    vpc-cni                = {}
+    eks-pod-identity-agent = {}
     aws-ebs-csi-driver = {
-      most_recent              = true
-      service_account_role_arn = var.aws_academy ? null : (var.manage_iam ? aws_iam_role.ebs_csi_driver[0].arn : var.ebs_csi_driver_role_arn)
+      most_recent = true
+      pod_identity_association = var.aws_academy ? [] : [{
+        role_arn        = var.manage_iam ? aws_iam_role.ebs_csi_driver[0].arn : var.ebs_csi_driver_role_arn
+        service_account = "ebs-csi-controller-sa"
+      }]
     }
   }
 
@@ -85,23 +91,11 @@ data "aws_iam_policy_document" "ebs_csi_driver_assume_role" {
 
   statement {
     effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
+    actions = ["sts:AssumeRole", "sts:TagSession"]
 
     principals {
-      type        = "Federated"
-      identifiers = [module.eks.oidc_provider_arn]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"]
     }
   }
 }
@@ -122,23 +116,11 @@ data "aws_iam_policy_document" "load_balancer_controller_assume_role" {
   count = var.aws_academy || !var.manage_iam ? 0 : 1
   statement {
     effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
+    actions = ["sts:AssumeRole", "sts:TagSession"]
 
     principals {
-      type        = "Federated"
-      identifiers = [module.eks.oidc_provider_arn]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(module.eks.cluster_oidc_issuer_url, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
+      type        = "Service"
+      identifiers = ["pods.eks.amazonaws.com"]
     }
   }
 }
@@ -184,6 +166,14 @@ data "aws_iam_policy_document" "load_balancer_controller" {
     ]
     resources = ["*"]
   }
+}
+
+resource "aws_eks_pod_identity_association" "load_balancer_controller" {
+  count           = var.aws_academy || !var.manage_iam ? 0 : 1
+  cluster_name    = module.eks.cluster_name
+  namespace       = "kube-system"
+  service_account = "aws-load-balancer-controller"
+  role_arn        = var.load_balancer_controller_role_arn != "" ? var.load_balancer_controller_role_arn : aws_iam_role.load_balancer_controller[0].arn
 }
 
 resource "aws_iam_role_policy" "load_balancer_controller" {

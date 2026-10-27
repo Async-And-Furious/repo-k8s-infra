@@ -216,15 +216,6 @@ resource "helm_release" "aws_load_balancer_controller" {
     name  = "serviceAccount.name"
     value = "aws-load-balancer-controller"
   }
-
-  dynamic "set" {
-    for_each = var.aws_academy ? [] : [module.eks.load_balancer_controller_role_arn]
-
-    content {
-      name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-      value = set.value
-    }
-  }
 }
 
 resource "helm_release" "metrics_server" {
