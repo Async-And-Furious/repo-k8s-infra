@@ -164,6 +164,15 @@ locals {
       type                          = "ingress"
       source_cluster_security_group = true
     }
+    egress_all = {
+      description      = "Allow all egress"
+      protocol         = "-1"
+      from_port        = 0
+      to_port          = 0
+      type             = "egress"
+      cidr_blocks      = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = var.cluster_ip_family == "ipv6" ? ["::/0"] : null
+    }
   } : k => v if var.node_security_group_enable_recommended_rules }
 
   efa_security_group_rules = { for k, v in
@@ -210,7 +219,9 @@ resource "aws_security_group" "node" {
   }
 }
 
-# Nodes are private and only require east-west traffic in the VPC security group.
+# Private nodes reach the AWS APIs (EC2, ECR, STS, SSM) through the NAT; nodeadm
+# cannot bootstrap with VPC-only egress until VPC endpoints are implemented.
+#trivy:ignore:AWS-0104:exp:2027-04-30
 resource "aws_security_group_rule" "node" {
   for_each = { for k, v in merge(
     local.efa_security_group_rules,

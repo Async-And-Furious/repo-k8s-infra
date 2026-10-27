@@ -39,7 +39,6 @@ module "eks" {
   node_max_size       = var.node_max_size
   vpc_id              = module.vpc.vpc_id
   private_subnet_ids  = module.vpc.private_subnet_ids
-  vpc_cidr            = var.vpc_cidr
 
   cluster_endpoint_public_access       = var.cluster_endpoint_public_access
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
@@ -216,15 +215,6 @@ resource "helm_release" "aws_load_balancer_controller" {
   set {
     name  = "serviceAccount.name"
     value = "aws-load-balancer-controller"
-  }
-
-  dynamic "set" {
-    for_each = var.aws_academy ? [] : [module.eks.load_balancer_controller_role_arn]
-
-    content {
-      name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-      value = set.value
-    }
   }
 }
 

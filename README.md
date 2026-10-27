@@ -41,9 +41,10 @@ nomes são `tc3-os-<environment>`, `tc3-billing-<environment>` e
 
 O contrato de HML é explícito: `t3.medium`, SPOT, `min=2`, `desired=3`, `max=3`.
 Ele mantém `min <= desired <= max`; não usar `t3.large` nesta entrega.
-O EBS CSI usa IRSA com IAM gerenciado, e a StorageClass `gp3` é criptografada e
-usa `WaitForFirstConsumer`. AWS Academy não suporta esse caminho de OIDC/IRSA:
-registre o spike e o bloqueio, sem credenciais estáticas ou acesso público.
+O EBS CSI usa EKS Pod Identity com IAM gerenciado, e a StorageClass `gp3` é
+criptografada e usa `WaitForFirstConsumer`. Não há IRSA: a SCP gerenciada pela
+AWS nas contas da nova experiência nega `iam:*Provider*`, então o OIDC provider
+não pode ser criado. AWS Academy também não suporta esse caminho.
 
 O gate está em `scripts/capacity-gate.sh`: `g1` mede requests e falha acima de
 70%, `g2` é somente plano por padrão e restaura o node após execução explícita,
@@ -54,7 +55,7 @@ O módulo EKS também faz o bootstrap do AWS Load Balancer Controller (incluindo
 sua CRD TargetGroupBinding) e do Metrics Server, com versões fixas de chart
 Helm. A versão do EKS é preservada para clusters existentes por padrão; defina
 `cluster_version` explicitamente quando um upgrade intencional for aprovado.
-O AWS Load Balancer Controller usa o role IRSA criado pelo Terraform (com
+O AWS Load Balancer Controller usa o role de Pod Identity criado pelo Terraform (com
 `manage_iam = true` e `aws_academy = false`, a configuração em uso). A API do
 Kubernetes é privada por padrão; defina
 `cluster_endpoint_public_access=true` somente quando necessário e forneça no
@@ -113,7 +114,7 @@ backend S3 abaixo.
 - A inicialização do provider Helm exige acesso de rede ao Terraform
   Registry; os charts Helm são buscados dos repositórios fixados durante o
   apply.
-- O AWS Load Balancer Controller usa o role IRSA criado pelo Terraform. O
+- O AWS Load Balancer Controller usa o role de Pod Identity criado pelo Terraform. O
   CLI `aws` precisa estar disponível onde quer que os recursos Helm sejam
   aplicados, porque o provider usa `aws eks get-token`.
 - Não aplique até que os pré-requisitos do cluster EKS e do node group
@@ -142,7 +143,7 @@ bucket é versionado, criptografado e bloqueado para acesso público.
 
 Os ambientes rodam em uma conta AWS pessoal, no free tier, autenticada por
 credenciais de usuário IAM. Nessa configuração o Terraform cria as próprias
-roles: control plane e node group do EKS, e o IRSA do AWS Load Balancer
+roles: control plane e node group do EKS, e os roles de Pod Identity do AWS Load Balancer
 Controller. Não é preciso definir `aws_academy`, `manage_iam` nem
 `lab_role_arn`; os padrões (`aws_academy = false`, `manage_iam = true`) já
 descrevem esse caminho.
@@ -154,7 +155,8 @@ control plane quanto no node group, e o controller passa a depender das
 permissões desse role. Trate essa combinação como legado, não como
 configuração de uso.
 
-Quando `manage_iam=false` na conta pessoal, um role IRSA existente do
+Quando `manage_iam=false` na conta pessoal, um role existente (confiando em
+`pods.eks.amazonaws.com`) do
 Load Balancer Controller é obrigatório. Defina a variável do repositório
 nesse caso; com `manage_iam=true`, deixá-la vazia ou sem definir preserva a
 criação do role pelo Terraform:
