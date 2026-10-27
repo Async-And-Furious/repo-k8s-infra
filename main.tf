@@ -235,7 +235,8 @@ resource "helm_release" "kafka" {
   name             = "kafka"
   namespace        = "kafka"
   create_namespace = false
-  repository       = "https://charts.bitnami.com/bitnami"
+  # Bitnami serves its charts only from the OCI registry now.
+  repository       = "oci://registry-1.docker.io/bitnamicharts"
   chart            = "kafka"
   version          = "32.4.3"
   values           = [file("${path.module}/kafka-values.yaml")]

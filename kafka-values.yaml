@@ -1,6 +1,14 @@
 # Bitnami Kafka chart 32.4.3. Credentials are supplied by the pre-created
 # kafka-sasl Secret; this file intentionally contains no secret material.
 fullnameOverride: kafka
+# Bitnami removed versioned tags from docker.io/bitnami; the same images live in
+# bitnamilegacy, and the chart only accepts a non-default repository with
+# allowInsecureImages.
+global:
+  security:
+    allowInsecureImages: true
+image:
+  repository: bitnamilegacy/kafka
 kraft:
   enabled: true
 zookeeper:
@@ -52,8 +60,8 @@ sasl:
     user: admin
   controller:
     user: controller
-  interBrokerMechanism: plain
-  controllerMechanism: plain
+  interBrokerMechanism: PLAIN
+  controllerMechanism: PLAIN
 extraEnvVars:
   - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
     value: "false"
@@ -75,7 +83,7 @@ extraDeploy:
           restartPolicy: OnFailure
           containers:
             - name: topics
-              image: bitnami/kafka:3.9.0-debian-12-r9
+              image: bitnamilegacy/kafka:4.0.0-debian-12-r10
               env:
                 - name: KAFKA_CLIENT_PASSWORD
                   valueFrom:
