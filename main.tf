@@ -25,6 +25,7 @@ module "vpc" {
   source = "./modules/vpc"
 
   environment = var.environment
+  azs         = ["${var.aws_region}a", "${var.aws_region}b"]
 }
 
 module "eks" {
