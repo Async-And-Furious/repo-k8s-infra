@@ -69,9 +69,10 @@ module "internal_alb" {
 }
 
 resource "aws_security_group_rule" "nodes_from_internal_alb" {
-  description              = "Allow the private ALB to reach EKS application pods"
-  type                     = "ingress"
-  for_each                 = module.internal_alb.service_target_group_ports
+  description = "Allow the private ALB to reach EKS application pods"
+  type        = "ingress"
+  # Deduplicate the shared backend port while retaining support for overrides.
+  for_each                 = toset(values(module.internal_alb.service_target_group_ports))
   from_port                = each.value
   to_port                  = each.value
   protocol                 = "tcp"

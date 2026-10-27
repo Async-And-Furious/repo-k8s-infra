@@ -176,6 +176,18 @@ correspondente:
 - `internal_alb_listener_arn` para a integração HTTP proxy do API Gateway; a
   aplicação não cria outro ALB ou listener.
 
+O ALB é interno e usa target groups independentes, todos em `3000`, com health
+check `/api/v1/health/live`. O target group `os` (também exposto pelos aliases
+`application_target_group_arn` e `internal_alb_target_group_arn`) permanece na
+ação padrão do listener. As regras adicionais são:
+
+- billing: `/api/v1/orcamentos*`, `/api/v1/pagamentos*`,
+  `/api/v1/webhooks/mercado-pago` e `/api/docs/billing*`;
+- execucao: `/api/v1/execucoes*` e `/api/docs/execucao*`.
+
+Os mapas `service_target_group_arns` e `service_listener_rule_arns` identificam
+os recursos por serviço; não há regra própria para `os`.
+
 A aplicação precisa criar um Service `ClusterIP` para seus pods e aplicar um
 `TargetGroupBinding` no mesmo namespace, com `spec.targetType: ip`,
 `spec.targetGroupARN` definido com o output acima, e
