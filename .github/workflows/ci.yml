@@ -433,6 +433,11 @@ jobs:
           fi
           nodegroup="$(aws eks list-nodegroups --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --query 'nodegroups[0]' --output text)"
           [[ -n "$nodegroup" && "$nodegroup" != "None" ]] || exit 0
+          status="$(aws eks describe-nodegroup --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name "$nodegroup" --query 'nodegroup.status' --output text)"
+          if [[ "$status" != 'ACTIVE' ]]; then
+            echo "HML node group $nodegroup is $status; Terraform will reconcile it, skipping capacity convergence."
+            exit 0
+          fi
           update_id="$(aws eks update-nodegroup-config --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name "$nodegroup" --scaling-config minSize=2,maxSize=3,desiredSize=2 --query 'update.id' --output text)"
           aws eks wait nodegroup-active --region "$AWS_REGION" --cluster-name "$CLUSTER_NAME" --nodegroup-name "$nodegroup"
           echo "Reconciled HML node group $nodegroup to min=2, desired=3, max=3 before the instance-type replacement."
