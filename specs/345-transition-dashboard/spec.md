@@ -6,7 +6,8 @@
 - Filter `Log` records by `logType = 'os.status.transition'` and
   `newStatus IN ('FINISHED', 'CLOSED_WITHOUT_EXECUTION')`; facet by `newStatus`.
 - Label results observed, partial and best effort. They are not the total of OS
-  status changes. Do not infer ingestion status or assume `appName`.
+  status changes. This does not complete issue #345 or provide complete Saga
+  or `appName` results. Do not infer ingestion status or assume `appName`.
 - `origin/develop` base `914f8b54bf28ca9144fff1f6579d7e64f946b6ea` has no
   `Fluxo distribuído` page; this increment uses `Logs` instead.
 

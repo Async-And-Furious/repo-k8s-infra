@@ -4,7 +4,9 @@
 
 - Acrescentado à página `Logs` um widget de transições observadas, filtrado
   para `FINISHED` e `CLOSED_WITHOUT_EXECUTION`, facetado por `newStatus` e
-  identificado como parcial/best effort. Mantidos os outros widgets.
+  identificado como parcial/best effort. Mantidos os outros widgets em linhas
+  1, 4 e 7; isto não conclui #345 nem representa resultados completos de Saga
+  ou `appName`.
 - A base `origin/develop` não contém página `Fluxo distribuído`; nenhum
   appName, estado de ingestão, plan/apply, HML ou AWS foi presumido ou executado.
 
