@@ -1,5 +1,13 @@
 # Log do agente
 
+## 2026-11-06 (#345 — resultados de transições OS)
+
+- Acrescentado à página `Logs` um widget de transições observadas, filtrado
+  para `FINISHED` e `CLOSED_WITHOUT_EXECUTION`, facetado por `newStatus` e
+  identificado como parcial/best effort. Mantidos os outros widgets.
+- A base `origin/develop` não contém página `Fluxo distribuído`; nenhum
+  appName, estado de ingestão, plan/apply, HML ou AWS foi presumido ou executado.
+
 ## 2026-10-08 (issue #313)
 
 - Preparados namespaces, LimitRanges, ECR por serviço, EBS CSI/IRSA, StorageClass

@@ -438,13 +438,25 @@ resource "newrelic_one_dashboard" "observability" {
 
     widget_table {
       title  = "Últimos erros"
-      row    = 2
+      row    = 3
       column = 1
       width  = 12
       height = 3
 
       nrql_query {
         query = "SELECT message, correlationId, timestamp FROM Log WHERE cluster_name = '${module.eks.cluster_name}' AND level = 'error' SINCE 1 day ago LIMIT 50"
+      }
+    }
+
+    widget_line {
+      title  = "Transições de status da OS observadas (parcial; best effort)"
+      row    = 2
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT count(*) FROM Log WHERE cluster_name = '${module.eks.cluster_name}' AND logType = 'os.status.transition' AND newStatus IN ('FINISHED', 'CLOSED_WITHOUT_EXECUTION') FACET newStatus TIMESERIES"
       }
     }
   }

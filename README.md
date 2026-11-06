@@ -261,6 +261,15 @@ O CI exige:
 | `NEW_RELIC_ACCOUNT_ID` | variável |
 | `NEW_RELIC_ALERT_EMAIL` | variável |
 
+### Transições de status da OS
+
+A página `Logs` inclui uma série temporal de logs com
+`logType = 'os.status.transition'`, filtrada para `newStatus` igual a
+`FINISHED` ou `CLOSED_WITHOUT_EXECUTION` e facetada por `newStatus`. O sinal é
+parcial e best effort: não equivale ao total de mudanças de status. A ausência
+de dados não comprova falha de ingestão; esta configuração não valida ingestão
+nem presume um `appName`.
+
 ## Workflows
 
 | Workflow | Disparo | O que faz |
