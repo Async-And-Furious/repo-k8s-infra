@@ -4,11 +4,12 @@
 
 - Add `Fluxo distribuído` to the existing dashboard. Preserve all existing pages
   and widgets, including the partial OS transition widget on `Logs`.
-- Include throughput and HTTP error rate from `Transaction`, using the existing
-  dashboard's evidenced `duration`, `http.statusCode` and `appName` attributes;
-  facet by `appName`, without hardcoding service names. These queries have no
-  verified service filter and cover all applications in the New Relic account,
-  not specifically the three Saga services.
+- Include throughput and HTTP error rate from `Transaction`, restricted to
+  `appName = local.new_relic_app_name` (the existing OS/environment identity)
+  and faceted by `appName`. Label both metrics as OS-only coverage, not as
+  coverage of the three Saga services.
+- For the HTTP error percentage, restrict the input set to transactions with
+  `http.statusCode IS NOT NULL`; the numerator remains numeric status >= 400.
 - Include the OS terminal transition series from `Log`, filtered by
   `logType = 'os.status.transition'` and `newStatus IN ('FINISHED',
   'CLOSED_WITHOUT_EXECUTION')`; facet by `newStatus`. Label it partial and
@@ -19,9 +20,9 @@
   expose `service`, not `appName`. Billing's checked-in `main` has no verified
   APM identity/instrumentation; its New Relic event instrumentation exists only
   in a sibling worktree. Execução's named APM environment is likewise found
-  only in an unmerged sibling worktree. Therefore FACET appName is a query
-  dimension, not proof that all three services emit Transactions or ingest
-  under any particular name. No per-service claims or names are inferred.
+  only in an unmerged sibling worktree. The verified filter limits these
+  widgets to the existing OS/environment app identity; Billing and Execução
+  remain pending and this does not satisfy complete three-service coverage.
 - `origin/develop` base `914f8b54bf28ca9144fff1f6579d7e64f946b6ea` had no
   `Fluxo distribuído` page. The issue's reduced scope excludes Kafka throughput,
   database widgets, and extraction to `observability.tf`.

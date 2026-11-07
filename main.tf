@@ -465,26 +465,26 @@ resource "newrelic_one_dashboard" "observability" {
     name = "Fluxo distribuído"
 
     widget_line {
-      title  = "Throughput — aplicações da conta, não filtradas aos três serviços (requisições/min)"
+      title  = "Throughput OS (requisições/min; cobertura apenas da OS)"
       row    = 1
       column = 1
       width  = 6
       height = 3
 
       nrql_query {
-        query = "SELECT rate(count(*), 1 minute) FROM Transaction FACET appName TIMESERIES"
+        query = "SELECT rate(count(*), 1 minute) FROM Transaction WHERE appName = '${local.new_relic_app_name}' FACET appName TIMESERIES"
       }
     }
 
     widget_line {
-      title  = "Taxa de erro HTTP — aplicações da conta, não filtradas aos três serviços (%)"
+      title  = "Taxa de erro HTTP OS (%) — cobertura apenas da OS"
       row    = 1
       column = 7
       width  = 6
       height = 3
 
       nrql_query {
-        query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction FACET appName TIMESERIES"
+        query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction WHERE appName = '${local.new_relic_app_name}' AND http.statusCode IS NOT NULL FACET appName TIMESERIES"
       }
     }
 

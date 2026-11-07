@@ -1,5 +1,15 @@
 # Log do agente
 
+## 2026-11-06 (#345 — restringir métricas Transaction à OS)
+
+- Filtradas as duas métricas de Transaction por `local.new_relic_app_name` e
+  `FACET appName`; títulos indicam cobertura apenas da OS. A métrica de erro
+  exclui transações sem `http.statusCode` no conjunto de entrada.
+- README/spec registram Billing e Execução como pendentes e que a página não
+  representa cobertura completa dos três serviços. Histórico anterior mantido.
+- Checks estáticos e `git diff --check`; Terraform indisponível. Sem AWS, HML,
+  PR ou push.
+
 ## 2026-11-06 (#345 — revisão do escopo do dashboard)
 
 - Evitada sobreposição: widgets Transaction na linha 1 e transições OS na linha

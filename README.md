@@ -274,13 +274,17 @@ completos de Saga ou de `appName`.
 ### Fluxo distribuído (#345)
 
 A página `Fluxo distribuído` mostra throughput (`rate(count(*), 1 minute)`) e
-percentual de erros HTTP (`http.statusCode >= 400`) em `Transaction`, facetados
-por `appName`, além das transições terminais observadas em `Log`, facetadas por
-`newStatus`. As duas queries de Transaction abrangem **todas as aplicações da
-conta New Relic, não filtradas aos três serviços**; não são métricas exclusivas
-da Saga. Os atributos de Transaction são os mesmos usados pelos widgets e
-alertas já existentes. O facet não inventaria nomes de serviço, mas não comprova
-que todos os três serviços reportam Transactions nem valida ingestão. Na
+percentual de erros HTTP em `Transaction`, facetados por `appName`, além das
+transições terminais observadas em `Log`, facetadas por `newStatus`. As queries
+de Transaction são filtradas pela identidade já configurada em
+`local.new_relic_app_name` (OS + ambiente), evitando misturar outras aplicações
+da conta. Os widgets estão rotulados como **cobertura apenas da OS** e não
+representam cobertura dos três serviços da Saga. Para a taxa de erro, a entrada
+da métrica exige `http.statusCode IS NOT NULL`; o numerador continua contando
+códigos numéricos >= 400. Os atributos de Transaction são os mesmos usados pelos
+widgets e alertas já existentes. Billing e Execução continuam pendentes: não
+foram confirmadas identidades APM aplicadas/deployadas para ambos, então isso
+não satisfaz cobertura completa dos três serviços. Na
 configuração atualmente verificada, a identidade OS é configurável via
 `NEW_RELIC_APP_NAME`; não foi confirmada identidade APM de Billing no `main`, e
 os nomes/configurações encontrados para Billing e Execução estão apenas em
