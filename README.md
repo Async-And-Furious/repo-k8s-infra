@@ -276,7 +276,9 @@ completos de Saga ou de `appName`.
 A página `Fluxo distribuído` mostra throughput (`rate(count(*), 1 minute)`) e
 percentual de erros HTTP (`http.statusCode >= 400`) em `Transaction`, facetados
 por `appName`, além das transições terminais observadas em `Log`, facetadas por
-`newStatus`. Os atributos de Transaction são os mesmos usados pelos widgets e
+`newStatus`. As duas queries de Transaction abrangem **todas as aplicações da
+conta New Relic, não filtradas aos três serviços**; não são métricas exclusivas
+da Saga. Os atributos de Transaction são os mesmos usados pelos widgets e
 alertas já existentes. O facet não inventaria nomes de serviço, mas não comprova
 que todos os três serviços reportam Transactions nem valida ingestão. Na
 configuração atualmente verificada, a identidade OS é configurável via

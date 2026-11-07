@@ -465,7 +465,7 @@ resource "newrelic_one_dashboard" "observability" {
     name = "Fluxo distribuído"
 
     widget_line {
-      title  = "Throughput de transações por serviço (requisições/min)"
+      title  = "Throughput — aplicações da conta, não filtradas aos três serviços (requisições/min)"
       row    = 1
       column = 1
       width  = 6
@@ -477,7 +477,7 @@ resource "newrelic_one_dashboard" "observability" {
     }
 
     widget_line {
-      title  = "Taxa de erro HTTP por serviço (%)"
+      title  = "Taxa de erro HTTP — aplicações da conta, não filtradas aos três serviços (%)"
       row    = 1
       column = 7
       width  = 6
@@ -490,7 +490,7 @@ resource "newrelic_one_dashboard" "observability" {
 
     widget_line {
       title  = "Transições terminais da OS observadas (parcial; best effort)"
-      row    = 2
+      row    = 4
       column = 1
       width  = 12
       height = 3

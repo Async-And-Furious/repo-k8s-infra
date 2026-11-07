@@ -6,7 +6,9 @@
   and widgets, including the partial OS transition widget on `Logs`.
 - Include throughput and HTTP error rate from `Transaction`, using the existing
   dashboard's evidenced `duration`, `http.statusCode` and `appName` attributes;
-  facet by `appName`, without hardcoding service names.
+  facet by `appName`, without hardcoding service names. These queries have no
+  verified service filter and cover all applications in the New Relic account,
+  not specifically the three Saga services.
 - Include the OS terminal transition series from `Log`, filtered by
   `logType = 'os.status.transition'` and `newStatus IN ('FINISHED',
   'CLOSED_WITHOUT_EXECUTION')`; facet by `newStatus`. Label it partial and
