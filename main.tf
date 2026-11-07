@@ -465,7 +465,7 @@ resource "newrelic_one_dashboard" "observability" {
     name = "Fluxo distribuído"
 
     widget_line {
-      title  = "Throughput OS (requisições/min; cobertura apenas da OS)"
+      title  = "Throughput OS (transações/min; cobertura apenas da OS)"
       row    = 1
       column = 1
       width  = 6
