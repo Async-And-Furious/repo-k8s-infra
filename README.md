@@ -271,6 +271,21 @@ de dados não comprova falha de ingestão; esta configuração não valida inges
 nem presume um `appName`. Isso não conclui a issue #345 nem fornece resultados
 completos de Saga ou de `appName`.
 
+### Fluxo distribuído (#345)
+
+A página `Fluxo distribuído` mostra throughput (`rate(count(*), 1 minute)`) e
+percentual de erros HTTP (`http.statusCode >= 400`) em `Transaction`, facetados
+por `appName`, além das transições terminais observadas em `Log`, facetadas por
+`newStatus`. Os atributos de Transaction são os mesmos usados pelos widgets e
+alertas já existentes. O facet não inventaria nomes de serviço, mas não comprova
+que todos os três serviços reportam Transactions nem valida ingestão. Na
+configuração atualmente verificada, a identidade OS é configurável via
+`NEW_RELIC_APP_NAME`; não foi confirmada identidade APM de Billing no `main`, e
+os nomes/configurações encontrados para Billing e Execução estão apenas em
+worktrees não integradas. O widget de transições é parcial/best-effort: logs não
+são resultados exatos/completos da Saga. Kafka throughput e banco por serviço
+permanecem fora do escopo reduzido acordado na #345.
+
 ## Workflows
 
 | Workflow | Disparo | O que faz |

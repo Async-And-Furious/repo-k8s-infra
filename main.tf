@@ -460,6 +460,46 @@ resource "newrelic_one_dashboard" "observability" {
       }
     }
   }
+
+  page {
+    name = "Fluxo distribuído"
+
+    widget_line {
+      title  = "Throughput de transações por serviço (requisições/min)"
+      row    = 1
+      column = 1
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT rate(count(*), 1 minute) FROM Transaction FACET appName TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Taxa de erro HTTP por serviço (%)"
+      row    = 1
+      column = 7
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction FACET appName TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Transições terminais da OS observadas (parcial; best effort)"
+      row    = 2
+      column = 1
+      width  = 12
+      height = 3
+
+      nrql_query {
+        query = "SELECT count(*) FROM Log WHERE cluster_name = '${module.eks.cluster_name}' AND logType = 'os.status.transition' AND newStatus IN ('FINISHED', 'CLOSED_WITHOUT_EXECUTION') FACET newStatus TIMESERIES"
+      }
+    }
+  }
 }
 
 # Operational alerts (issue #167). Same account/data as #163/#166 — no new

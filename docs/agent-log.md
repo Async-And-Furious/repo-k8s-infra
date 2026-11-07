@@ -1,14 +1,14 @@
 # Log do agente
 
-## 2026-11-06 (#345 — resultados de transições OS)
+## 2026-11-06 (#345 — fluxo distribuído)
 
-- Acrescentado à página `Logs` um widget de transições observadas, filtrado
-  para `FINISHED` e `CLOSED_WITHOUT_EXECUTION`, facetado por `newStatus` e
-  identificado como parcial/best effort. Mantidos os outros widgets em linhas
-  1, 4 e 7; isto não conclui #345 nem representa resultados completos de Saga
-  ou `appName`.
-- A base `origin/develop` não contém página `Fluxo distribuído`; nenhum
-  appName, estado de ingestão, plan/apply, HML ou AWS foi presumido ou executado.
+- Adicionada a página `Fluxo distribuído` com throughput e taxa de erro HTTP
+  facetados por `appName`, além de transições terminais OS observadas. Mantidos
+  todos os widgets existentes, incluindo o da página `Logs`.
+- Documentadas as lacunas de identidade/ingestão por serviço; não se infere que
+  Billing e Execução emitam Transactions sob nomes específicos. Transições são
+  best effort, não resultados completos de Saga.
+- Sem New Relic live query, Terraform plan/apply, HML, AWS, push ou PR.
 
 ## 2026-10-08 (issue #313)
 
@@ -344,3 +344,13 @@
 - Terraform fmt, init sem backend e validate passaram. O plan do AWS Academy
   não foi executado porque a AWS CLI local falhou antes que as credenciais
   pudessem ser verificadas.
+# 2026-11-06 — #345 distributed dashboard
+
+- Added the `Fluxo distribuído` page with Transaction throughput and HTTP error
+  rate faceted by `appName`, plus the OS terminal transition log series. Kept
+  all existing pages/widgets and the existing partial Logs query.
+- Spec/README record the evidence boundary: Transaction attributes come from
+  existing Terraform widgets/alerts; verified Billing and Execução APM names
+  exist only in sibling worktrees, not checked-in main/deployed evidence.
+  `FACET appName` therefore does not assert all three services are ingesting.
+- No live New Relic query, Terraform plan/apply, HML, AWS, push, or PR.
