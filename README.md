@@ -261,6 +261,37 @@ O CI exige:
 | `NEW_RELIC_ACCOUNT_ID` | variável |
 | `NEW_RELIC_ALERT_EMAIL` | variável |
 
+### Transições de status da OS
+
+A página `Logs` recebeu um incremento parcial: uma série temporal de logs com
+`logType = 'os.status.transition'`, filtrada para `newStatus` igual a
+`FINISHED` ou `CLOSED_WITHOUT_EXECUTION` e facetada por `newStatus`. O sinal é
+parcial e best effort: não equivale ao total de mudanças de status. A ausência
+de dados não comprova falha de ingestão; esta configuração não valida ingestão
+nem presume um `appName`. Isso não conclui a issue #345 nem fornece resultados
+completos de Saga ou de `appName`.
+
+### Fluxo distribuído (#345)
+
+A página `Fluxo distribuído` mostra throughput (`rate(count(*), 1 minute)`) e
+percentual de erros HTTP em `Transaction`, facetados por `appName`, além das
+transições terminais observadas em `Log`, facetadas por `newStatus`. As queries
+de Transaction são filtradas pela identidade já configurada em
+`local.new_relic_app_name` (OS + ambiente), evitando misturar outras aplicações
+da conta. Os widgets estão rotulados como **cobertura apenas da OS** e não
+representam cobertura dos três serviços da Saga. Para a taxa de erro, a entrada
+da métrica exige `http.statusCode IS NOT NULL`; o numerador continua contando
+códigos numéricos >= 400. Os atributos de Transaction são os mesmos usados pelos
+widgets e alertas já existentes. Billing e Execução continuam pendentes: não
+foram confirmadas identidades APM aplicadas/deployadas para ambos, então isso
+não satisfaz cobertura completa dos três serviços. Na
+configuração atualmente verificada, a identidade OS é configurável via
+`NEW_RELIC_APP_NAME`; não foi confirmada identidade APM de Billing no `main`, e
+os nomes/configurações encontrados para Billing e Execução estão apenas em
+worktrees não integradas. O widget de transições é parcial/best-effort: logs não
+são resultados exatos/completos da Saga. Kafka throughput e banco por serviço
+permanecem fora do escopo reduzido acordado na #345.
+
 ## Workflows
 
 | Workflow | Disparo | O que faz |

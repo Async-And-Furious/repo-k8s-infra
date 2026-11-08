@@ -1,5 +1,33 @@
 # Log do agente
 
+## 2026-11-06 (#345 — restringir métricas Transaction à OS)
+
+- Filtradas as duas métricas de Transaction por `local.new_relic_app_name` e
+  `FACET appName`; títulos indicam cobertura apenas da OS. A métrica de erro
+  exclui transações sem `http.statusCode` no conjunto de entrada.
+- README/spec registram Billing e Execução como pendentes e que a página não
+  representa cobertura completa dos três serviços. Histórico anterior mantido.
+- Checks estáticos e `git diff --check`; Terraform indisponível. Sem AWS, HML,
+  PR ou push.
+
+## 2026-11-06 (#345 — revisão do escopo do dashboard)
+
+- Evitada sobreposição: widgets Transaction na linha 1 e transições OS na linha
+  4. Títulos e README esclarecem que as queries abrangem todas as aplicações da
+  conta New Relic, não apenas os três serviços.
+- Restaurado o histórico anterior sem alteração; esta é a única nova entrada.
+- Validação estática/diff local; sem HML, AWS ou push.
+
+## 2026-11-06 (#345 — resultados de transições OS)
+
+- Acrescentado à página `Logs` um widget de transições observadas, filtrado
+  para `FINISHED` e `CLOSED_WITHOUT_EXECUTION`, facetado por `newStatus` e
+  identificado como parcial/best effort. Mantidos os outros widgets em linhas
+  1, 4 e 7; isto não conclui #345 nem representa resultados completos de Saga
+  ou `appName`.
+- A base `origin/develop` não contém página `Fluxo distribuído`; nenhum
+  appName, estado de ingestão, plan/apply, HML ou AWS foi presumido ou executado.
+
 ## 2026-10-08 (issue #313)
 
 - Preparados namespaces, LimitRanges, ECR por serviço, EBS CSI/IRSA, StorageClass
