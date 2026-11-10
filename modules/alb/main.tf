@@ -73,6 +73,14 @@ resource "aws_lb_target_group" "service" {
   health_check {
     path = each.value.health_check_path
   }
+
+  # Com target_type = "ip", o TargetGroupBinding registra cada pod com a porta do próprio pod;
+  # a porta do target group é só o padrão. Trocar a porta força replace, e a AWS recusa
+  # apagar um target group em uso por uma regra do listener (apply de 10/11 falhou assim,
+  # depois de já ter removido as regras de security group). Por isso a porta fica como está.
+  lifecycle {
+    ignore_changes = [port]
+  }
 }
 
 #trivy:ignore:AWS-0054: Internal ALB HTTP is the approved API Gateway VPC Link target; this repo has no ACM certificate or domain contract.
