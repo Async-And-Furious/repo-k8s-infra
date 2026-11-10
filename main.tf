@@ -45,6 +45,7 @@ module "eks" {
   aws_academy                          = var.aws_academy
   manage_iam                           = var.manage_iam
   lab_role_arn                         = var.lab_role_arn
+  cluster_admin_principal_arns         = var.cluster_admin_principal_arns
   eks_cluster_role_arn                 = var.eks_cluster_role_arn
   eks_node_role_arn                    = var.eks_node_role_arn
   load_balancer_controller_role_arn    = var.load_balancer_controller_role_arn

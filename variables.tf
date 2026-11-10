@@ -112,6 +112,17 @@ variable "lab_role_arn" {
   }
 }
 
+variable "cluster_admin_principal_arns" {
+  description = "Extra IAM principals (users or roles) granted cluster-admin on EKS, besides the cluster creator"
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for arn in var.cluster_admin_principal_arns : can(regex("^arn:[^:]+:iam::[0-9]{12}:(user|role)/.+$", arn))])
+    error_message = "cluster_admin_principal_arns must contain only IAM user or role ARNs."
+  }
+}
+
 check "aws_academy_configuration" {
   assert {
     condition     = !var.aws_academy || (!var.manage_iam && var.lab_role_arn != "")
