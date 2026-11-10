@@ -239,6 +239,21 @@ Não há OIDC. O workflow usa os secrets `AWS_ACCESS_KEY_ID` e
 temporárias). Chaves de usuário IAM não expiram sozinhas; rotacione-as com
 `gh secret set`, sem commitar nem imprimir os valores.
 
+**Acesso ao cluster EKS.** Fora do modo Academy, só o usuário IAM que roda o
+Terraform (o dos secrets acima) recebe acesso ao cluster, pelo access entry
+`cluster_creator`. Para dar `AmazonEKSClusterAdminPolicy` a outros usuários ou
+roles (por exemplo, a chave usada no deploy de outro serviço ou o `kubectl` de
+outro integrante), cadastre a variável `EKS_ADMIN_PRINCIPAL_ARNS` no
+environment com uma lista JSON de ARNs:
+
+```bash
+gh variable set EKS_ADMIN_PRINCIPAL_ARNS -R Async-And-Furious/repo-k8s-infra -e hml \
+  -b '["arn:aws:iam::<conta>:user/<usuario>"]'
+```
+
+O próximo `apply` cria os access entries. O ARN de quem roda o Terraform é
+ignorado nessa lista, porque ele já tem o `cluster_creator`.
+
 O disparo manual ainda expõe `academy_mode` e `lab_role_arn`, do caminho
 legado descrito em "Conta AWS". Mantenha `academy_mode=false`, que é o padrão
 e o valor que `up.yml` e `down.yml` passam.

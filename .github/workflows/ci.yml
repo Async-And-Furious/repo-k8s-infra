@@ -85,6 +85,8 @@ env:
   TF_VAR_eks_node_role_arn: ${{ vars.EKS_NODE_ROLE_ARN }}
   TF_VAR_load_balancer_controller_role_arn: ${{ vars.LOAD_BALANCER_CONTROLLER_ROLE_ARN }}
   TF_VAR_lab_role_arn: ${{ vars.LAB_ROLE_ARN }}
+  # Lista HCL/JSON de ARNs IAM com cluster-admin no EKS, além de quem roda o Terraform. Ex.: ["arn:aws:iam::123456789012:user/fulano"]
+  TF_VAR_cluster_admin_principal_arns: ${{ vars.EKS_ADMIN_PRINCIPAL_ARNS || '[]' }}
   TF_VAR_new_relic_license_key: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
   TF_VAR_new_relic_account_id: ${{ vars.NEW_RELIC_ACCOUNT_ID }}
   TF_VAR_new_relic_api_key: ${{ secrets.NEW_RELIC_API_KEY }}

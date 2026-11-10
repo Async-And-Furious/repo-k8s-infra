@@ -26,6 +26,22 @@ locals {
       }
     }
   } : {}
+
+  # Outside Academy only the cluster creator (the IAM principal that runs this Terraform) gets
+  # access. These principals let other group members run kubectl and the service pipelines.
+  # The caller is skipped: it already has the "cluster_creator" entry, and AWS rejects a
+  # second access entry for the same principal.
+  extra_admin_access_entries = {
+    for arn in distinct(var.cluster_admin_principal_arns) : arn => {
+      principal_arn = arn
+      policy_associations = {
+        admin = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    } if arn != data.aws_caller_identity.current.arn && !contains(keys(local.academy_access_entries), arn)
+  }
 }
 
 module "eks" {
@@ -33,7 +49,7 @@ module "eks" {
 
   # Keep the Academy path from querying iam:GetRole for the assumed voclabs session.
   enable_cluster_creator_admin_permissions = var.aws_academy ? false : true
-  access_entries                           = local.academy_access_entries
+  access_entries                           = merge(local.academy_access_entries, local.extra_admin_access_entries)
   kms_key_administrators                   = var.aws_academy ? [var.lab_role_arn] : []
 
   cluster_name              = "tc3-eks-${var.environment}"

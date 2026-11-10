@@ -21,6 +21,12 @@ variable "lab_role_arn" {
   default     = ""
 }
 
+variable "cluster_admin_principal_arns" {
+  description = "Extra IAM principals (users or roles) granted cluster-admin through EKS access entries, besides the cluster creator"
+  type        = list(string)
+  default     = []
+}
+
 variable "vpc_id" {
   description = "VPC id from the vpc module"
   type        = string
