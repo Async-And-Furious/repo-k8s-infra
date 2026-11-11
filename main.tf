@@ -19,6 +19,8 @@ provider "newrelic" {
 locals {
   node_instance_types = coalesce(var.node_instance_types, ["t3.medium"])
   new_relic_app_name  = "async-furious-project-${var.environment}"
+  # Os três serviços da Fase 4 (#345). Billing e Execução usam o prefixo af- (configmap de cada repositório).
+  new_relic_saga_apps = join(", ", [for app in [local.new_relic_app_name, "af-billing-${var.environment}", "af-execucao-${var.environment}"] : "'${app}'"])
 }
 
 module "vpc" {
@@ -467,26 +469,26 @@ resource "newrelic_one_dashboard" "observability" {
     name = "Fluxo distribuído"
 
     widget_line {
-      title  = "Throughput OS (transações/min; cobertura apenas da OS)"
+      title  = "Throughput por serviço (transações/min)"
       row    = 1
       column = 1
       width  = 6
       height = 3
 
       nrql_query {
-        query = "SELECT rate(count(*), 1 minute) FROM Transaction WHERE appName = '${local.new_relic_app_name}' FACET appName TIMESERIES"
+        query = "SELECT rate(count(*), 1 minute) FROM Transaction WHERE appName IN (${local.new_relic_saga_apps}) FACET appName TIMESERIES"
       }
     }
 
     widget_line {
-      title  = "Taxa de erro HTTP OS (%) — cobertura apenas da OS"
+      title  = "Taxa de erro HTTP por serviço (%)"
       row    = 1
       column = 7
       width  = 6
       height = 3
 
       nrql_query {
-        query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction WHERE appName = '${local.new_relic_app_name}' AND http.statusCode IS NOT NULL FACET appName TIMESERIES"
+        query = "SELECT percentage(count(*), WHERE numeric(http.statusCode) >= 400) FROM Transaction WHERE appName IN (${local.new_relic_saga_apps}) AND http.statusCode IS NOT NULL FACET appName TIMESERIES"
       }
     }
 
@@ -499,6 +501,30 @@ resource "newrelic_one_dashboard" "observability" {
 
       nrql_query {
         query = "SELECT count(*) FROM Log WHERE cluster_name = '${module.eks.cluster_name}' AND logType = 'os.status.transition' AND newStatus IN ('FINISHED', 'CLOSED_WITHOUT_EXECUTION') FACET newStatus TIMESERIES"
+      }
+    }
+
+    widget_line {
+      title  = "Consumo Kafka por serviço (transações Kafka/<tópico> por min)"
+      row    = 7
+      column = 1
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT rate(count(*), 1 minute) FROM Transaction WHERE appName IN (${local.new_relic_saga_apps}) AND name LIKE 'OtherTransaction/Kafka/%' FACET appName, name TIMESERIES"
+      }
+    }
+
+    widget_bar {
+      title  = "Duração média por etapa da Saga (SagaStep, ms)"
+      row    = 7
+      column = 7
+      width  = 6
+      height = 3
+
+      nrql_query {
+        query = "SELECT average(durationMs) FROM SagaStep FACET service, step, outcome SINCE 1 day ago"
       }
     }
   }
