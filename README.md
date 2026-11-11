@@ -288,24 +288,28 @@ completos de Saga ou de `appName`.
 
 ### Fluxo distribuído (#345)
 
-A página `Fluxo distribuído` mostra throughput (`rate(count(*), 1 minute)`) e
-percentual de erros HTTP em `Transaction`, facetados por `appName`, além das
-transições terminais observadas em `Log`, facetadas por `newStatus`. As queries
-de Transaction são filtradas pela identidade já configurada em
-`local.new_relic_app_name` (OS + ambiente), evitando misturar outras aplicações
-da conta. Os widgets estão rotulados como **cobertura apenas da OS** e não
-representam cobertura dos três serviços da Saga. Para a taxa de erro, a entrada
-da métrica exige `http.statusCode IS NOT NULL`; o numerador continua contando
-códigos numéricos >= 400. Os atributos de Transaction são os mesmos usados pelos
-widgets e alertas já existentes. Billing e Execução continuam pendentes: não
-foram confirmadas identidades APM aplicadas/deployadas para ambos, então isso
-não satisfaz cobertura completa dos três serviços. Na
-configuração atualmente verificada, a identidade OS é configurável via
-`NEW_RELIC_APP_NAME`; não foi confirmada identidade APM de Billing no `main`, e
-os nomes/configurações encontrados para Billing e Execução estão apenas em
-worktrees não integradas. O widget de transições é parcial/best-effort: logs não
-são resultados exatos/completos da Saga. Kafka throughput e banco por serviço
-permanecem fora do escopo reduzido acordado na #345.
+A página `Fluxo distribuído` cobre os três serviços da Saga. As queries de
+`Transaction` filtram por `local.new_relic_saga_apps`: o app do OS
+(`local.new_relic_app_name`) e `af-billing-<env>` e `af-execucao-<env>`, os
+nomes definidos no configmap de cada repositório. Assim não se misturam outras
+aplicações da conta. Widgets:
+
+- **Throughput por serviço** (`rate(count(*), 1 minute)`) e **taxa de erro HTTP
+  por serviço**, facetados por `appName`. A taxa de erro exige
+  `http.statusCode IS NOT NULL` na entrada e conta códigos numéricos >= 400.
+- **Transições terminais da OS**, em `Log`, facetadas por `newStatus`
+  (`FINISHED` × `CLOSED_WITHOUT_EXECUTION`): é o widget de sagas por resultado do
+  escopo mínimo. É best effort, porque logs não são resultado exato da Saga, e
+  não depende do `SagaCompleted`.
+- **Consumo Kafka por serviço**: as background transactions
+  `OtherTransaction/Kafka/<tópico>` que cada consumidor abre ao propagar o
+  trace (#343/#344), facetadas por `appName` e tópico.
+- **Duração média por etapa** (`SagaStep`, emitido pelo Billing), facetada por
+  `service`, `step` e `outcome`.
+
+Os widgets do Billing e do Execução só têm dado depois que os dois sobem em HML
+com a license key (repo-billing e repo-execucao-service#12). Banco por serviço e
+a extração para `observability.tf` seguem fora do escopo reduzido da #345.
 
 ## Workflows
 
